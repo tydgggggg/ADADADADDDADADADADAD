@@ -26,7 +26,6 @@ jobs:
         
         echo "⏳ در حال نصب کلودفلرد برای ساخت تانل..."
         curl -L -o cloudflared.deb https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64.deb
-        # 👑 اصلاح این خط برای نصب صحیح فایل دانلود شده
         sudo dpkg -i cloudflared.deb
 
     - name: Launch Virtual Desktop & Cloudflare Tunnel
@@ -57,14 +56,7 @@ jobs:
         cloudflared tunnel --url http://127.0.0.1:6080 > cloudflare.log 2>&1 &
         sleep 10
         
-        # ۷. استخراج و چاپ لینک اختصاصی شما با بنر بزرگ
-        echo "======================================================================"
-        echo "📢 📢 📢 داداش لینک ورود به دسکتاپ مجازی (noVNC) شما آماده شد:"
-        echo "----------------------------------------------------------------------"
-        grep -o 'https://[^ ]*trycloudflare.com' cloudflare.log || echo "❌ لینک هنوز تولید نشده، چند ثانیه دیگر این استپ را باز و بسته کنید یا لاگ استپ بعدی را ببینید."
-        echo "======================================================================"
-        
-        # ذخیره موقت لاگ برای یادآوری در استپ‌های بعدی
+        # ۷. ذخیره لاگ برای دسترسی ربات و اسکریپت‌ها
         cp cloudflare.log /tmp/cloudflare.log
 
     - name: Create Project Files (package.json & bot.js)
@@ -96,9 +88,26 @@ jobs:
         let targetPlayer = null;
         let lastPos = null;
 
+        // تابع کمکی برای استخراج و چاپ لینک مستقیم در آخر لاگ
+        function printTunnelLink() {
+            try {
+                const fs = require('fs');
+                if (fs.existsSync('/tmp/cloudflare.log')) {
+                    const logContent = fs.readFileSync('/tmp/cloudflare.log', 'utf8');
+                    const match = logContent.match(/https:\/\/[^ ]*trycloudflare\.com/);
+                    if (match) {
+                        console.log('----------------------------------------------------------------------');
+                        console.log(`🌐 لینک مستقیم دسکتاپ (noVNC) شما: ${match[0]}`);
+                        console.log('----------------------------------------------------------------------');
+                    }
+                }
+            } catch (e) {}
+        }
+
         function createBot() {
             console.log('\n=====================================================');
             console.log('=== 🚀 در حال اتصال بات pvp_HSbot به سرور 6b6t ===');
+            printTunnelLink(); // چاپ لینک موقع شروع اتصال
             console.log('=====================================================\n');
             
             const bot = mineflayer.createBot({
@@ -246,6 +255,7 @@ jobs:
             bot.on('end', (reason) => {
                 console.log('\n======================================================================');
                 console.log(`🛑 ارتباط قطع شد (end). دلیل: ${reason}`);
+                printTunnelLink(); // 🔥 چاپ لینک دقیقاً در زمان قطع اتصال و تایم‌اوت ۴ دقیقه‌ای در انتهای لاگ
                 console.log('⏱️ طبق دستور شما، ۴ دقیقه (۲۴۰۰۰۰ میلی ثانیه) قفل می‌کنیم تا بتونی وریفای کنی...');
                 console.log('======================================================================\n');
                 setTimeout(() => createBot(), 240000);
@@ -267,12 +277,12 @@ jobs:
 
     - name: Run Bot in Infinite Loop
       run: |
-        echo "======================================================================"
-        echo "🌐 جهت یادآوری مجدد، لینک ورود به دسکتاپ شما:"
-        grep -o 'https://[^ ]*trycloudflare.com' /tmp/cloudflare.log || echo "لینک را از استپ Launch Virtual Desktop بردار داداش"
-        echo "======================================================================"
         echo "=== در حال اجرای بات با قابلیت خود-ترمیمی زنده ==="
         while true; do
+          # چاپ لینک دقیقاً قبل از استارت مجدد هر پروسه در لوپ نهایی
+          echo "----------------------------------------------------------------------"
+          grep -o 'https://[^ ]*trycloudflare.com' /tmp/cloudflare.log || echo "لینک موقت یافت نشد"
+          echo "----------------------------------------------------------------------"
           node bot.js
           echo "بات متوقف شد یا کرش کرد. طبق دستور، ۴ دقیقه (۲۴۰ ثانیه) تا راه اندازی مجدد صبر میکنیم..."
           sleep 240
