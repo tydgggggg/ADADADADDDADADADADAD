@@ -23,7 +23,6 @@ jobs:
         echo "⏳ در حال نصب کلودفلرد و نیازمندی‌های مرورگر لینوکس..."
         curl -L -o cloudflared.deb https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64.deb
         sudo dpkg -i cloudflared.deb
-        # فیکس شده: استفاده از libasound2t64 برای سازگاری کامل با اوبونتو جدید گیت‌هاب
         sudo apt-get update && sudo apt-get install -y wget gnupg ca-certificates procps libxss1 libasound2t64 libatk-bridge2.0-0 libgtk-3-0 libgbm1
 
     - name: Launch Cloudflare Tunnel
@@ -206,6 +205,23 @@ jobs:
 
             bot.once('connect', () => {
                 logToWeb('🔌 سوکت شبکه بازی باز شد. ارسال پکت هندشیک...');
+                
+                // 🛠 فیکس هوشمند فاز لاگین: شنود دیسکانکت خام قبل از مرحله Spawn برای استخراج متن کیک
+                if (bot._client) {
+                    bot._client.once('disconnect', (packet) => {
+                        try {
+                            const rawReason = JSON.stringify(packet.reason || packet);
+                            logToWeb(`📥 پکت دیسکانکت خام در فاز لاگین رصد شد.`);
+                            const codeMatch = rawReason.match(/\b\d{6}\b/);
+                            if (codeMatch) {
+                                const extractedCode = codeMatch[0];
+                                logToWeb(`🔑 مژده! کد ۶ رقمی از دیسکانکت خام استخراج شد: ${extractedCode}`);
+                                if (forwardInterval) clearInterval(forwardInterval);
+                                runWebVerification(extractedCode);
+                            }
+                        } catch (e) {}
+                    });
+                }
             });
 
             bot.on('spawn', () => {
@@ -313,7 +329,7 @@ jobs:
                 }
             });
 
-            // شکار پیام دیسکانکت و استخراج کد ۶ رقمی وریفای سایت
+            // شکار پیام دیسکانکت استاندارد در فاز Play
             bot.on('kick', (reason) => {
                 const reasonStr = JSON.stringify(reason);
                 logToWeb(`❌ بات دیسکانکت شد. علت: ${reasonStr}`);
