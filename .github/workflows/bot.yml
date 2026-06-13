@@ -23,8 +23,8 @@ jobs:
         echo "⏳ در حال نصب کلودفلرد و نیازمندی‌های مرورگر لینوکس..."
         curl -L -o cloudflared.deb https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64.deb
         sudo dpkg -i cloudflared.deb
-        # نصب پکیج‌های لازم برای اجرای بدون مشکل Puppeteer در محیط اوبونتو گیت‌هاب
-        sudo apt-get update && sudo apt-get install -y wget gnupg ca-certificates procps libxss1 libasound2 libatk-bridge2.0-0 libgtk-3-0 libgbm1
+        # فیکس شده: استفاده از libasound2t64 برای سازگاری کامل با اوبونتو جدید گیت‌هاب
+        sudo apt-get update && sudo apt-get install -y wget gnupg ca-certificates procps libxss1 libasound2t64 libatk-bridge2.0-0 libgtk-3-0 libgbm1
 
     - name: Launch Cloudflare Tunnel
       run: |
