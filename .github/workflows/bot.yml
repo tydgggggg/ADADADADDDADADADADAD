@@ -18,11 +18,13 @@ jobs:
       with:
         node-version: '20'
 
-    - name: Install Cloudflared
+    - name: Install Cloudflared & Browser Dependencies
       run: |
-        echo "⏳ در حال نصب کلودفلرد برای تانل مستقیم وب پنل..."
+        echo "⏳ در حال نصب کلودفلرد و نیازمندی‌های مرورگر لینوکس..."
         curl -L -o cloudflared.deb https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64.deb
         sudo dpkg -i cloudflared.deb
+        # نصب پکیج‌های لازم برای اجرای بدون مشکل Puppeteer در محیط اوبونتو گیت‌هاب
+        sudo apt-get update && sudo apt-get install -y wget gnupg ca-certificates procps libxss1 libasound2 libatk-bridge2.0-0 libgtk-3-0 libgbm1
 
     - name: Launch Cloudflare Tunnel
       run: |
@@ -33,7 +35,7 @@ jobs:
 
     - name: Create Project Files (package.json & bot.js)
       run: |
-        # ۱. ساخت فایل package.json
+        # ۱. ساخت فایل package.json همراه با پپتیر
         cat << 'EOF' > package.json
         {
           "name": "6b6t-pvp-hsbot",
@@ -45,22 +47,24 @@ jobs:
             "mineflayer-pathfinder": "^2.4.0",
             "minecraft-data": "^3.73.0",
             "express": "^4.19.2",
-            "@google/generative-ai": "latest"
+            "@google/generative-ai": "latest",
+            "puppeteer": "^22.6.0"
           }
         }
         EOF
 
-        # ۲. ساخت فایل هوشمند اصلی bot.js با رانندگی مستقیم جمنای
+        # ۲. ساخت فایل هوشمند اصلی bot.js با سیستم خودکار وریفای سایت و پورتال‌ها
         cat << 'EOF' > bot.js
         const mineflayer = require('mineflayer');
         const { pathfinder, Movements, goals } = require('mineflayer-pathfinder');
         const { GoogleGenerativeAI } = require('@google/generative-ai');
+        const puppeteer = require('puppeteer');
         const express = require('express');
         const app = express();
 
         app.use(express.json());
 
-        // پیکربندی مستقیم هسته هوش مصنوعی با کلید شما داداش گلم
+        // پیکربندی هسته هوش مصنوعی با کلید جدید و دقیق شما داداش گلم
         const genAI = new GoogleGenerativeAI('AQ.Ab8RN6LgR3sgqSN4mvfrIM-7KUPpDWul55EdJksMr06LQm42fA');
         const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
 
@@ -70,9 +74,10 @@ jobs:
         let autoMode = false;
         let waitingForTpaConfirm = false;
         let targetPlayer = null;
-        let geminiInterval = null;
+        let forwardInterval = null;
         let chatLogs = [];
-        let recentMessages = []; 
+        let portalStage = 0; // شمارشگر پورتال‌های رد شده (۰ تا ۲)
+        let isVerifyingWeb = false;
 
         function logToWeb(msg) {
             const timestamp = new Date().toLocaleTimeString();
@@ -89,78 +94,105 @@ jobs:
                     const match = logContent.match(/https:\/\/[^ ]*trycloudflare\.com/);
                     if (match) {
                         console.log('----------------------------------------------------------------------');
-                        console.log(`🌐 لینک مستقیم پنل مدیریت وب شما (بدون گرافیک سنگین): ${match[0]}`);
+                        console.log(`🌐 لینک مستقیم پنل مدیریت وب شما: ${match[0]}`);
                         console.log('----------------------------------------------------------------------');
                     }
                 }
             } catch (e) {}
         }
 
-        // هوش مصنوعی جمنای در نقش راننده و هدایت‌کننده بات به سمت پورتال‌ها
-        function startGeminiDriving() {
-            if (geminiInterval) clearInterval(geminiInterval);
+        // تابع اتوماسیون مرورگر و حل کپچای سایت توسط جمنای
+        async function runWebVerification(verifyCode) {
+            if (isVerifyingWeb) return;
+            isVerifyingWeb = true;
+            logToWeb(`🌐 شروع فرآیند مرورگر زنده برای تایید هویت در سایت با کد: ${verifyCode}`);
             
-            logToWeb('🧠 سیستم رانندگی و هدایت خودکار جمنای برای عبور از پورتال‌ها استارت خورد...');
-            
-            geminiInterval = setInterval(async () => {
-                if (isInMainMap) {
-                    clearInterval(geminiInterval);
-                    logToWeb('🔒 بات مستقر شد؛ کنترلر جمنای خاموش و سیستم به حالت عادی برگشت.');
-                    return;
+            try {
+                const browser = await puppeteer.launch({
+                    headless: true,
+                    args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage']
+                });
+                const page = await browser.newPage();
+                await page.setViewport({ width: 1280, height: 800 });
+                
+                logToWeb('🌐 در حال باز کردن صفحه وریفای سرور...');
+                await page.goto('https://www.6b6t.org/en/verify', { waitUntil: 'networkidle2', timeout: 60000 });
+
+                // وارد کردن نام کاربری بات در کادر اول و کد در کادر دوم
+                const inputs = await page.$$('input');
+                if (inputs.length >= 2) {
+                    await inputs[0].type('pvp_HSbot', { delay: 50 });
+                    await inputs[1].type(verifyCode, { delay: 50 });
+                    logToWeb('✍️ نام کاربری و کد ۶ رقمی با موفقیت در فرم درج شد.');
                 }
 
-                // استخراج اطلاعات فیزیکی بات برای تصمیم‌گیری حرکتی جمنای
-                const posX = bot.entity?.position ? Math.round(bot.entity.position.x) : 0;
-                const posY = bot.entity?.position ? Math.round(bot.entity.position.y) : 0;
-                const posZ = bot.entity?.position ? Math.round(bot.entity.position.z) : 0;
-                const isStuck = bot.entity?.isCollidedHorizontally || false;
+                await new Promise(r => setTimeout(r, 2000));
+                
+                // اسکرین‌شات از صفحه برای آنالیز کپچا توسط بینایی جمنای
+                const screenshotBase64 = await page.screenshot({ encoding: 'base64' });
+                logToWeb('📸 اسکرین‌شات کپچا برای بررسی به جمنای ارسال شد...');
 
-                try {
-                    const prompt = `You are actively controlling and driving a Minecraft bot inside the 6b6t.org lobby server.
-        Your goal is to navigate through the lobby portals into the main anarchy world map.
-        
-        Current Live Status:
-        - Position: X=${posX}, Y=${posY}, Z=${posZ
-        - Is the bot hitting a wall/stuck right now: ${isStuck}
-        
-        Recent Server Chat/System Logs:
-        ${recentMessages.join('\n')}
+                const imagePart = {
+                    inlineData: { data: screenshotBase64, mimeType: "image/png" }
+                };
 
-        Decide your next action based on logs and collision status:
-        1. If the logs confirm the bot has successfully gone through the portals and is now safely in the main anarchy map, reply EXACTLY with: STATUS: MAIN_MAP
-        2. If still in the lobby/queue, output the required movement controls to keep moving forward, or jump if stuck, to reach the portal. Reply EXACTLY in this format: CONTROLS: forward=[true/false], jump=[true/false], back=[true/false]
-        
-        Strict Rule: Reply with ONLY one line containing either STATUS: MAIN_MAP or the CONTROLS format. Do not add any greeting or markdown text.`;
+                const captchaPrompt = `This is a verification page for a Minecraft server. We filled the username and code.
+                Now look at the captcha checkbox / Turnstile / reCAPTCHA widget on this page.
+                Find the exact location of the checkbox or verification tick area.
+                Provide the approximate X and Y coordinates on a 1280x800 screen to click it.
+                Format your response exactly as: CLICK: X=[pixel], Y=[pixel]
+                If it's already ticked or just needs submission, reply: CLICK: SUBMIT`;
 
-                    const result = await model.generateContent(prompt);
-                    const responseText = result.response.text().trim();
-                    
-                    if (responseText.toUpperCase().includes('STATUS: MAIN_MAP')) {
-                        isInMainMap = true;
-                        autoMode = true;
-                        bot.clearControlStates();
-                        logToWeb('🚀 جمنای ورود به مپ اصلی را تایید کرد! هدایت هوشمند متوقف و حالت اتوماتیک چت فعال شد.');
-                        clearInterval(geminiInterval);
-                    } else if (responseText.toUpperCase().includes('CONTROLS:')) {
-                        // پارس کردن دستورات حرکتی صادر شده از جمنای
-                        const forwardMatch = responseText.match(/forward=(true|false)/i);
-                        const jumpMatch = responseText.match(/jump=(true|false)/i);
-                        const backMatch = responseText.match(/back=(true|false)/i);
+                const result = await model.generateContent([captchaPrompt, imagePart]);
+                const aiResponse = result.response.text().trim();
+                logToWeb(`🧠 تحلیل کپچای جمنای: ${aiResponse}`);
 
-                        if (forwardMatch) bot.setControlState('forward', forwardMatch[1].toLowerCase() === 'true');
-                        if (jumpMatch) bot.setControlState('jump', jumpMatch[1].toLowerCase() === 'true');
-                        if (backMatch) bot.setControlState('back', backMatch[1].toLowerCase() === 'true');
-                        
-                        logToWeb(`🎮 فرمان جمنای اعمال شد -> ${responseText}`);
+                if (aiResponse.toUpperCase().includes('CLICK: X=')) {
+                    const match = aiResponse.match(/X=(\d+),\s*Y=(\d+)/i);
+                    if (match) {
+                        const clickX = parseInt(match[1]);
+                        const clickY = parseInt(match[2]);
+                        await page.mouse.click(clickX, clickY);
+                        logToWeb(`🖱 جمنای روی نقطه کپچا کلیک کرد (X: ${clickX}, Y: ${clickY})`);
+                        await new Promise(r => setTimeout(r, 6000)); // زمان جهت باز شدن یا حل تیک کپچا
                     }
-                } catch (err) {
-                    logToWeb(`⚠️ خطای ارتباط با راننده جمنای: ${err.message}`);
                 }
-            }, 3000); // فرکانس ۳ ثانیه‌ای برای رانندگی زنده و روان در لابی
+
+                // پیدا کردن و فشردن دکمه Submit Verification
+                const buttons = await page.$$('button');
+                let clickedSubmit = false;
+                for (let btn of buttons) {
+                    const text = await page.evaluate(el => el.textContent, btn);
+                    if (text.includes('Submit') || text.includes('Verification') || text.includes('Verify')) {
+                        await btn.click();
+                        logToWeb('✅ دکمه Submit Verification با موفقیت فشرده شد.');
+                        clickedSubmit = true;
+                        break;
+                    }
+                }
+
+                if (!clickedSubmit) {
+                    // روش زاپاس کلیک روی فرم یا دکمه ارسال در صورت پیدا نشدن متن
+                    await page.keyboard.press('Enter');
+                    logToWeb('⌨️ کلید اینتر به عنوان زاپاس برای ثبت فرم فشرده شد.');
+                }
+
+                await new Promise(r => setTimeout(r, 4000));
+                await browser.close();
+                logToWeb('🎉 فرآیند وب وریفای با موفقیت پایان یافت. مرورگر بسته شد.');
+            } catch (err) {
+                logToWeb(`❌ خطای جدی در عملکرد وب وریفای پپتیر: ${err.message}`);
+            } finally {
+                isVerifyingWeb = false;
+                // بعد از اتمام کار وب، بلافاصله مجدداً هسته گیم کانکت می‌شود
+                setTimeout(() => createBot(), 2000);
+            }
         }
 
         function createBot() {
-            logToWeb('🚀 در حال راه‌اندازی هسته خودمختار بات و اتصال به سرور 6b6t...');
+            if (isVerifyingWeb) return; // اگر در حال کار با سایت است فعلا کلاینت بازی صبر کند
+
+            logToWeb('🚀 در حال اتصال کلاینت ماینکرفت به سرور 6b6t...');
             printTunnelLink();
             
             bot = mineflayer.createBot({
@@ -173,40 +205,54 @@ jobs:
             bot.loadPlugin(pathfinder);
 
             bot.once('connect', () => {
-                logToWeb('🔌 سوکت اولیه شبکه باز شد. ارسال پکت هندشیک...');
-                if (bot._client) {
-                    bot._client.removeAllListeners('disconnect');
-                    bot._client.on('disconnect', (packet) => {
-                        logToWeb(`⚠️ [پکت دیسکانکت خام سرور] دریافت شد:\n${JSON.stringify(packet, null, 2)}`);
-                    });
-                }
+                logToWeb('🔌 سوکت شبکه بازی باز شد. ارسال پکت هندشیک...');
             });
 
             bot.on('spawn', () => {
-                logToWeb('✅ بات اسپان شد. شروع عملیات عبور اتوماتیک...');
-                
-                if (!autoMode) {
-                    isInMainMap = false;
-                    recentMessages = [];
-                    startGeminiDriving(); // واگذاری کامل کنترل هدایت به جمنای
-                }
+                logToWeb('✅ بات داخل لابی اسپان شد.');
                 waitingForTpaConfirm = false;
                 targetPlayer = null;
 
+                if (isInMainMap) {
+                    logToWeb('👑 بات قبلاً در مپ اصلی مستقر شده است. حالت خودکار چت فعال است.');
+                    return;
+                }
+
                 setTimeout(() => {
                     bot.chat('/login AZHAN8585@#@#ABOL1234');
-                    logToWeb('➡ دستور لاگین ارسال شد.');
+                    logToWeb('➡ دستور لاگین به سرور ارسال شد.');
+
+                    // سیستم ناوبری عبور متوالی از پورتال‌های اول و دوم
+                    logToWeb(`🏃‍♂️ سیستم ناوبری استارت شد. در حال حرکت به سمت پورتال فاز: ${portalStage + 1}`);
+                    if (forwardInterval) clearInterval(forwardInterval);
+                    
+                    forwardInterval = setInterval(() => {
+                        if (!isInMainMap) {
+                            bot.setControlState('forward', true);
+                            if (bot.entity && bot.entity.isCollidedHorizontally) {
+                                bot.setControlState('jump', true);
+                            } else {
+                                bot.setControlState('jump', false);
+                            }
+                        } else {
+                            clearInterval(forwardInterval);
+                        }
+                    }, 100);
                 }, 2000);
             });
 
+            // رویداد جابجایی اجباری یا دایمنشن چنج که نشان‌دهنده ورود به پورتال است
             bot.on('forcedMove', () => {
-                if (autoMode && isInMainMap) {
-                    if (waitingForTpaConfirm && targetPlayer) {
-                        waitingForTpaConfirm = false;
-                        setTimeout(() => {
-                            bot.chat('/kill');
-                            targetPlayer = null;
-                        }, 1500);
+                if (!isInMainMap) {
+                    portalStage++;
+                    logToWeb(`🌀 بات یک پورتال را رد کرد! تعداد پورتال‌های عبور شده: ${portalStage}`);
+                    
+                    if (portalStage >= 2) {
+                        isInMainMap = true;
+                        autoMode = true;
+                        if (forwardInterval) clearInterval(forwardInterval);
+                        bot.clearControlStates();
+                        logToWeb('⚡ تایید نهایی: بات از هر دو پورتال لابی عبور کرد و وارد مپ اصلی شد! هوش مصنوعی جمنای خاموش شد.');
                     }
                 }
             });
@@ -217,9 +263,10 @@ jobs:
                 if (username === 'pvp_HS' && message === 'pvp_HSbot STOP') {
                     autoMode = false;
                     isInMainMap = false;
-                    if (geminiInterval) clearInterval(geminiInterval);
+                    portalStage = 0;
+                    if (forwardInterval) clearInterval(forwardInterval);
                     if (bot) bot.clearControlStates();
-                    logToWeb('🛑 ترمز دستی چت بازی کشیده شد. حالت خودکار خاموش و کنترل دستی پنل باز شد.');
+                    logToWeb('🛑 کنترلر خودکار متوقف و حالت دستی فعال شد.');
                     return;
                 }
 
@@ -261,24 +308,31 @@ jobs:
                 const msg = jsonMsg.toString();
                 logToWeb(msg);
                 
-                if (!isInMainMap) {
-                    recentMessages.push(msg);
-                    if (recentMessages.length > 15) recentMessages.shift();
-                }
-                
                 if (autoMode && (msg.includes('has requested to teleport to you') || msg.includes('tpa'))) {
                     bot.chat('/tpaccept');
                 }
             });
 
+            // شکار پیام دیسکانکت و استخراج کد ۶ رقمی وریفای سایت
             bot.on('kick', (reason) => {
-                logToWeb(`❌ بات کیک شد! علت: ${JSON.stringify(reason)}`);
+                const reasonStr = JSON.stringify(reason);
+                logToWeb(`❌ بات دیسکانکت شد. علت: ${reasonStr}`);
+                
+                const codeMatch = reasonStr.match(/\b\d{6}\b/);
+                if (codeMatch) {
+                    const extractedCode = codeMatch[0];
+                    logToWeb(`🔑 مژده! کد ۶ رقمی وریفای کشف شد: ${extractedCode}`);
+                    if (forwardInterval) clearInterval(forwardInterval);
+                    runWebVerification(extractedCode);
+                }
             });
 
             bot.on('end', (reason) => {
-                if (geminiInterval) clearInterval(geminiInterval);
-                logToWeb(`🛑 ارتباط قطع شد (${reason}). تلاش مجدد سریع تا ۱۰ ثانیه دیگر...`);
-                setTimeout(() => createBot(), 10000);
+                if (forwardInterval) clearInterval(forwardInterval);
+                if (!isVerifyingWeb) {
+                    logToWeb(`🛑 ارتباط با سرور قطع شد (${reason}). تلاش مجدد تا ۱۰ ثانیه دیگر...`);
+                    setTimeout(() => createBot(), 10000);
+                }
             });
 
             bot.on('error', (err) => {
@@ -303,7 +357,7 @@ jobs:
                 </style>
             </head>
             <body>
-                <h2>🤖 پنل مدیریت هوشمند تحت وب (Gemini AI Live Driver)</h2>
+                <h2>🤖 پنل مدیریت هوشمند تحت وب (Full Automation Mode)</h2>
                 <div id="dashboard-wrapper">
                     <div id="stats">در حال دریافت داده‌ها...</div>
                     <div id="console"></div>
@@ -323,7 +377,7 @@ jobs:
                         fetch('/api/status').then(r => r.json()).then(d => {
                             document.getElementById('stats').innerHTML = 
                                 '📍 <b>موقعیت فعلی:</b> X: ' + d.pos.x + ' | Y: ' + d.pos.y + ' | Z: ' + d.pos.z + 
-                                '<br>⚙️ <b>وضعیت فاز عملیاتی:</b> ' + (d.autoMode ? '<span style="color:#4caf50;font-weight:bold;">مستقر در مپ اصلی (AUTO)</span>' : '<span style="color:#ff9800;font-weight:bold;">هدایت فرمان و ناوبری زنده لابی توسط مغز جمنای...</span>');
+                                '<br>⚙️ <b>وضعیت فاز عملیاتی:</b> ' + (d.autoMode ? '<span style="color:#4caf50;font-weight:bold;">مستقر در مپ اصلی (AUTO) - جمنای خاموش</span>' : '<span style="color:#ff9800;font-weight:bold;">در حال مانیتورینگ لابی، وریفای خودکار وب و عبور از پورتال‌ها...</span>');
                             let c = document.getElementById('console');
                             c.innerHTML = d.logs.map(l => '<div>' + l + '</div>').join('');
                             c.scrollTop = c.scrollHeight;
