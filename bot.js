@@ -1,6 +1,49 @@
 const mineflayer = require('mineflayer');
 const { pathfinder, Movements, goals } = require('mineflayer-pathfinder');
 const GoalBlock = goals.GoalBlock;
+const https = require('https'); // ماژول داخلی برای ارسال پیام به تلگرام
+
+// ==========================================================================
+// ⚙️ تنظیمات تلگرام (داداش توکن بات و چت آیدی خودت رو اینجا وارد کن)
+// ==========================================================================
+const TELEGRAM_BOT_TOKEN = '8940324884:AAGZLh7pJ1go9JmWdlMnaoD6j2wWRAnpADY'; // توکن بات تلگرامت
+const TELEGRAM_CHAT_ID = '8517754313';     // چت آیدی خودت (عددی)
+
+// تابع اختصاصی برای فرستادن آنی کد وریفای به تلگرام تو
+function sendToTelegram(messageText) {
+    if (!TELEGRAM_BOT_TOKEN || TELEGRAM_BOT_TOKEN === 'YOUR_TELEGRAM_BOT_TOKEN') {
+        console.log('⚠ داداش توکن تلگرام رو تنظیم نکردی، پیام فقط توی لاگ چاپ میشه.');
+        return;
+    }
+    
+    const data = JSON.stringify({
+        chat_id: TELEGRAM_CHAT_ID,
+        text: messageText,
+        parse_mode: 'HTML'
+    });
+
+    const options = {
+        hostname: 'api.telegram.org',
+        port: 443,
+        path: `/bot${TELEGRAM_BOT_TOKEN}/sendMessage`,
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'Content-Length': data.length
+        }
+    };
+
+    const req = https.request(options, (res) => {
+        res.on('data', () => {});
+    });
+
+    req.on('error', (err) => {
+        console.error('❌ خطا در ارسال پیام به تلگرام:', err.message);
+    });
+
+    req.write(data);
+    req.end();
+}
 
 // وضعیت‌های داخلی بات
 let portalsEntered = 0;
@@ -17,35 +60,30 @@ function createBot() {
     const bot = mineflayer.createBot({
         host: '6b6t.org',
         username: 'pvp_HSbot',
-        version: '1.21.1', // تنظیم روی آخرین نسخه پایدار سرور
+        version: '1.21.1',
         skipValidation: true
     });
 
-    // بارگذاری پلاگین مسیریابی هوشمند برای رفتن داخل پورتال‌ها و سمت چست‌ها
     bot.loadPlugin(pathfinder);
 
     bot.on('spawn', () => {
-        console.log('✅ بات با موفقیت وارد سرور شد و اسپاون شد!');
+        console.log('✅ بات با موفقیت وارد سرور شد!');
         
-        // ۱. عملیات لاگین خودکار با پسورد شما
         setTimeout(() => {
             bot.chat('/login AZHAN8585@#@#ABOL1234');
             console.log('➡ دستور لاگین ارسال شد.');
         }, 2000);
 
-        // ریست کردن وضعیت لابی‌ها در صورت دیسکانکت و اتصال مجدد
         portalsEntered = 0;
         isInMainMap = false;
         waitingForTpaConfirm = false;
         targetPlayer = null;
 
-        // شروع پایش پورتال‌های لابی بعد از لاگین
         setTimeout(() => {
             findAndEnterPortal(bot);
         }, 5000);
     });
 
-    // ۲. سیستم هوشمند رد کردن ۲ مرحله‌ای پورتال‌های لابی
     async function findAndEnterPortal(bot) {
         if (isInMainMap || portalsEntered >= 2) return;
 
@@ -60,17 +98,15 @@ function createBot() {
             console.log(`📍 پورتال در مختصات ${portalBlock.position} پیدا شد. حرکت به سمت آن...`);
             const mcData = require('minecraft-data')(bot.version);
             const movements = new Movements(bot, mcData);
-            movements.canDig = false; // بلاک‌ها رو خراب نکنه
+            movements.canDig = false;
             bot.pathfinder.setMovements(movements);
             
             bot.pathfinder.setGoal(new GoalBlock(portalBlock.position.x, portalBlock.position.y, portalBlock.position.z));
         } else {
-            // اگر پیدا نشد، ۳ ثانیه دیگر دوباره بگرد
             setTimeout(() => findAndEnterPortal(bot), 3000);
         }
     }
 
-    // تشخیص عبور از پورتال بر اساس پرش ناگهانی مختصات (تلپورت لابی)
     bot.on('move', () => {
         if (isInMainMap) return;
         if (!lastPos) { lastPos = bot.entity.position.clone(); return; }
@@ -81,30 +117,25 @@ function createBot() {
             
             if (portalsEntered >= 2) {
                 isInMainMap = true;
-                console.log('=== 🎉 بات با موفقیت وارد مپ اصلی 6b6t شد! سیستم خودکار پورتال خاموش شد ===');
+                console.log('=== 🎉 بات با موفقیت وارد مپ اصلی 6b6t شد! ===');
             } else {
-                // ورود به لابی دوم، ۵ ثانیه صبر و سپس ورود به پورتال دوم
                 setTimeout(() => findAndEnterPortal(bot), 5000);
             }
         }
         lastPos = bot.entity.position.clone();
     });
 
-    // ۳. مدیریت دستورات چت و ریکوئست‌های TPA
     bot.on('chat', async (username, message) => {
         if (username === bot.username) return;
 
-        // دستور درخواست تی‌پی از بات
         if (message === 'pvp_HS tpa') {
             console.log(`💬 درخواست TPA از طرف ${username}`);
             bot.chat(`/tpa ${username}`);
         }
 
-        // دستور برداشتن توتم یا کیت از چست و انتحاری
         if (message === 'pvp_HS totem' || message === 'pvp_HSkit') {
             console.log(`📦 دستور کیت/توتم توسط ${username} دریافت شد. جستجوی چست...`);
             
-            // پیدا کردن نزدیک‌ترین چست یا چست ترپ شده در بیس شما
             const chestBlock = bot.findBlock({
                 matching: [bot.registry.blocksByName['chest'].id, bot.registry.blocksByName['trapped_chest'].id],
                 maxDistance: 20
@@ -117,7 +148,6 @@ function createBot() {
 
             try {
                 const chest = await bot.openChest(chestBlock);
-                // جستجو برای پیدا کردن هر نوع شالکر باکس موجود در چست
                 const shulkerItem = chest.containerItems().find(item => item.name.includes('shulker_box'));
 
                 if (!shulkerItem) {
@@ -126,12 +156,10 @@ function createBot() {
                     return;
                 }
 
-                // برداشتن ۱ عدد شالکر باکس
                 await chest.withdraw(shulkerItem.type, null, 1);
                 chest.close();
                 bot.chat(`/w ${username} شالکر برداشته شد. دارم بهت TPA میدم...`);
 
-                // آماده‌سازی برای تلپورت و مرگ
                 targetPlayer = username;
                 waitingForTpaConfirm = true;
                 bot.chat(`/tpa ${username}`);
@@ -143,7 +171,6 @@ function createBot() {
         }
     });
 
-    // قبول کردن خودکار TPA وقتی تو بهش ریکوئست میدی
     bot.on('message', (jsonMsg) => {
         const msg = jsonMsg.toString();
         if (msg.includes('has requested to teleport to you') || msg.includes('tpa')) {
@@ -152,7 +179,6 @@ function createBot() {
         }
     });
 
-    // ۴. تشخیص رسیدن به موقعیت تو و زدن دستور خودکشی
     bot.on('forcedMove', () => {
         if (waitingForTpaConfirm && targetPlayer) {
             waitingForTpaConfirm = false;
@@ -162,68 +188,56 @@ function createBot() {
                 bot.chat('/kill');
                 console.log(`☠️ بات کشته شد و شالکر کیت دراپ شد. بازگشت به تخت بیس...`);
                 targetPlayer = null;
-            }, 1500); // ۱.۵ ثانیه صبر میکنه تا مپ لود شه و شالکر دقیقاً پیش تو بیفته
+            }, 1500);
         }
     });
 
-    // 🔥 هاب اصلی گزارش کیک شدن با جزئیات میکروسکوپی برای وریفای شما
+    // 🔥 شکارچی اصلی پیام کیک سرور و ارسال آن به تلگرام شما
     bot.on('kick', (reason) => {
+        let kickMessage = 'نامشخص';
+        
+        // استخراج و تمیز کردن متن ارور سرور (حتی اگر ساختار پیچیده ماینکرفتی داشته باشه)
+        if (reason) {
+            if (typeof reason === 'object') {
+                kickMessage = reason.text || '';
+                if (reason.extra && Array.isArray(reason.extra)) {
+                    kickMessage += ' ' + reason.extra.map(e => e.text || JSON.stringify(e)).join('');
+                }
+                if (!kickMessage) kickMessage = JSON.stringify(reason, null, 2);
+            } else {
+                kickMessage = reason.toString();
+            }
+        }
+
         console.log('\n======================================================================');
-        console.log('⚠️ ⚠️ ⚠️ ⚠️  ALERT: KICKED FROM SERVER  ⚠️ ⚠️ ⚠️ ⚠️');
-        console.log('داداش بات از سرور کیک شد! اطلاعات کامل علت کیک در زیر است:');
-        console.log('----------------------------------------------------------------------');
-        console.log('فرمت متنی (Reason):', reason ? reason.toString() : 'تهی');
-        console.log('نوع داده دلیل کیک:', typeof reason);
-        try {
-            console.log('فرمت خام ساختار داده (JSON):', JSON.stringify(reason, null, 2));
-        } catch (e) {
-            console.log('امکان تبدیل به JSON وجود نداشت:', e.message);
-        }
-        if (reason && typeof reason === 'object') {
-            if (reason.text) console.log('💬 متن مستقیم آبجکت:', reason.text);
-            if (reason.extra) console.log('💬 بخش اضافی متن (Extra):', JSON.stringify(reason.extra));
-        }
+        console.log('⚠️ ALERT: KICKED FROM SERVER - متن کامل در زیر چاپ و به تلگرام ارسال شد:');
+        console.log(kickMessage);
         console.log('======================================================================\n');
+
+        // ساخت قالب پیام تلگرام
+        const telegramAlert = `🚨 <b>بات pvp_HSbot از سرور 6b6t کیک شد!</b>\n\n` +
+                              `🔑 <b>پیام کیک / کد وریفای VPN:</b>\n` +
+                              `<code>${kickMessage}</code>\n\n` +
+                              `⏱ <b>داداش ۴ دقیقه (۲۴۰ ثانیه) فرصت داری این رو توی سایت ثبت کنی. بعد از اون بات دوباره تلاش می‌کنه وارد بشه.</b>`;
+        
+        // ارسال مستقیم به تلگرام شما
+        sendToTelegram(telegramAlert);
     });
 
-    // ۵. سیستم آنتی دیسکانکت با تاخیر فیکس ۴ دقیقه‌ای (۲۴۰۰۰۰ میلی‌ثانیه)
     bot.on('end', (reason) => {
-        console.log('\n======================================================================');
-        console.log(`🛑 CONNECTION ENDED: ارتباط با لایه شبکه سرور قطع شد.`);
-        console.log(`علت پایان ارتباط: ${reason}`);
-        console.log('⏱️ طبق دستور شما، ۴ دقیقه (۲۴۰۰۰۰ میلی ثانیه) قفل می‌کنیم تا بتونی توی لاگ چک کنی و وریفای کنی...');
-        console.log('======================================================================\n');
+        console.log(`🛑 ارتباط قطع شد (end). دلیل: ${reason}`);
+        console.log('⏱️ طبق دستور شما، ۴ دقیقه (۲۴۰۰۰۰ میلی ثانیه) قفل می‌کنیم تا بتونی کارات رو بکنی...');
         setTimeout(() => createBot(), 240000);
     });
 
-    // هیدلر خطاهای تحت شبکه
     bot.on('error', (err) => {
-        console.log('\n======================================================================');
-        console.error('❌ NET ERROR DETECTED: خطای تحت شبکه یا کلاینت ماینکرفت رخ داد:');
-        if (err) {
-            console.error('پیام خطا:', err.message);
-            console.error('محل وقوع خطا (Stack):', err.stack);
-        }
-        console.log('======================================================================\n');
+        console.error('❌ خطای شبکه:', err ? err.message : 'نامشخص');
     });
 }
 
-// ==========================================================================
-// 🛡️ هیدلرهای سرتاسری سیستم برای گرفتن کرش‌های ناگهانی Node.js و چاپ اجباری لاگ
-// ==========================================================================
+// جلوگیری از کرش کل پروسه گیت‌هاب برای اطمینان از ارسال پیام
 process.on('uncaughtException', (err) => {
-    console.log('\n======================================================================');
-    console.error('🔥 CRITICAL UNCAUGHT EXCEPTION: یک خطای غیرمنتظره کل سیستم را متوقف کرد!');
-    console.error(err);
-    console.log('======================================================================\n');
+    console.error('🔥 خطای ناگهانی پروسه:', err);
 });
 
-process.on('unhandledRejection', (reason, promise) => {
-    console.log('\n======================================================================');
-    console.error('🌊 CRITICAL UNHANDLED REJECTION: یک عملیات پس‌زمینه (Promise) با خطا مواجه شد!');
-    console.error(reason);
-    console.log('======================================================================\n');
-});
-
-// استارت اولیه بات
 createBot();
