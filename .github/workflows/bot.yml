@@ -18,6 +18,54 @@ jobs:
       with:
         node-version: '20'
 
+    - name: Install Desktop Environment & Cloudflared
+      run: |
+        echo "⏳ در حال نصب ابزارهای محیط گرافیکی و مرورگر..."
+        sudo apt-get update
+        sudo apt-get install -y xvfb fluxbox x11vnc novnc chromium-browser
+        
+        echo "⏳ در حال نصب کلودفلرد برای ساخت تانل..."
+        curl -L -o cloudflared.deb https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64.deb
+        sudo dpkg -i cloudflared-linux-amd64.deb
+
+    - name: Launch Virtual Desktop & Cloudflare Tunnel
+      run: |
+        echo "🚀 در حال راه‌اندازی دسکتاپ مجازی..."
+        # ۱. ساخت یک نمایشگر مجازی
+        Xvfb :1 -screen 0 1280x1024x24 &
+        sleep 2
+        export DISPLAY=:1
+        
+        # ۲. اجرای مدیریت پنجره‌های سبک (Fluxbox)
+        fluxbox &
+        sleep 2
+        
+        # ۳. راه‌اندازی سرور VNC بدون رمز روی لوکال‌هاست
+        x11vnc -display :1 -nopw -forever -bg -listen 127.0.0.1 &
+        sleep 2
+        
+        # ۴. راه‌اندازی وب‌اینترفیس noVNC روی پورت 6080
+        /usr/share/novnc/utils/launch.sh --vnc 127.0.0.1:5900 --listen 6080 &
+        sleep 3
+        
+        # ۵. اجرای خودکار مرورگر داخل دسکتاپ (با فلگ مخصوص برای گیت‌هاب)
+        chromium-browser --no-sandbox --disable-setuid-sandbox &
+        sleep 2
+        
+        # ۶. استارت تانل موقت و رایگان کلودفلر روی پورت noVNC
+        cloudflared tunnel --url http://127.0.0.1:6080 > cloudflare.log 2>&1 &
+        sleep 10
+        
+        # ۷. استخراج و چاپ لینک اختصاصی شما با بنر بزرگ
+        echo "======================================================================"
+        echo "📢 📢 📢 داداش لینک ورود به دسکتاپ مجازی (noVNC) شما آماده شد:"
+        echo "----------------------------------------------------------------------"
+        grep -o 'https://[^ ]*trycloudflare.com' cloudflare.log || echo "❌ لینک هنوز تولید نشده، چند ثانیه دیگر این استپ را باز و بسته کنید یا لاگ استپ بعدی را ببینید."
+        echo "======================================================================"
+        
+        # ذخیره موقت لاگ برای یادآوری در استپ‌های بعدی
+        cp cloudflare.log /tmp/cloudflare.log
+
     - name: Create Project Files (package.json & bot.js)
       run: |
         # ۱. ساخت خودکار فایل package.json
@@ -174,7 +222,6 @@ jobs:
                 }
             });
 
-            // ⚠️ شکارچی پیام کیک رسمی ماینکرفت
             bot.on('kick', (reason) => {
                 let kickMessage = 'تهی';
                 if (reason) {
@@ -196,13 +243,9 @@ jobs:
                 console.log('======================================================================\n');
             });
 
-            // 🛑 وقتی ارتباط دیسکانکت یا قطع کامل میشه
             bot.on('end', (reason) => {
                 console.log('\n======================================================================');
                 console.log(`🛑 ارتباط قطع شد (end). دلیل: ${reason}`);
-                if (reason === 'socketClosed') {
-                    console.log('💡 نکته: این ارور یعنی فایروال سرور اتصال رو در لایه شبکه بسته.');
-                }
                 console.log('⏱️ طبق دستور شما، ۴ دقیقه (۲۴۰۰۰۰ میلی ثانیه) قفل می‌کنیم تا بتونی وریفای کنی...');
                 console.log('======================================================================\n');
                 setTimeout(() => createBot(), 240000);
@@ -224,6 +267,10 @@ jobs:
 
     - name: Run Bot in Infinite Loop
       run: |
+        echo "======================================================================"
+        echo "🌐 جهت یادآوری مجدد، لینک ورود به دسکتاپ شما:"
+        grep -o 'https://[^ ]*trycloudflare.com' /tmp/cloudflare.log || echo "لینک را از استپ Launch Virtual Desktop بردار داداش"
+        echo "======================================================================"
         echo "=== در حال اجرای بات با قابلیت خود-ترمیمی زنده ==="
         while true; do
           node bot.js
