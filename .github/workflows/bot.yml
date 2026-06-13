@@ -69,17 +69,16 @@ jobs:
         }
         EOF
 
-        # ۲. ساخت خودکار فایل اصلی bot.js (هوشمند شده)
+        # ۲. ساخت خودکار فایل اصلی bot.js (سیستم دویدن مستقیم و کنترل دستی)
         cat << 'EOF' > bot.js
         const mineflayer = require('mineflayer');
         const { pathfinder, Movements, goals } = require('mineflayer-pathfinder');
-        const GoalBlock = goals.GoalBlock;
 
-        let portalsEntered = 0;
         let isInMainMap = false;
+        let manualForward = true;
         let waitingForTpaConfirm = false;
         let targetPlayer = null;
-        let lastPortalTime = 0;
+        let forwardInterval = null;
 
         function printTunnelLink() {
             try {
@@ -113,80 +112,41 @@ jobs:
 
             bot.once('connect', () => {
                 console.log('🔌 سوکت اولیه شبکه باز شد. در حال ارسال پکت هندشیک...');
-                if (bot._client) {
-                    bot._client.on('disconnect', (packet) => {
-                        console.log('\n======================================================================');
-                        console.log('⚠️ پکت دیسکانکت خام از سرور دریافت شد:');
-                        console.log(JSON.stringify(packet, null, 2));
-                        console.log('======================================================================\n');
-                    });
-                }
             });
 
             bot.on('spawn', () => {
                 console.log('✅ بات با موفقیت وارد سرور شد!');
+                
                 setTimeout(() => {
                     bot.chat('/login AZHAN8585@#@#ABOL1234');
-                    console.log('➡ دستور لاگین ارسال شد.');
+                    console.log('➡ دستور لاگین ارسال شد. شروع دویدن مستقیم به جلو و پرش خودکار...');
+                    
+                    manualForward = true;
+                    isInMainMap = false;
+                    
+                    // حلقه فعال نگه داشتن حرکت رو به جلو و پرش در صورت برخورد با موانع
+                    if (forwardInterval) clearInterval(forwardInterval);
+                    forwardInterval = setInterval(() => {
+                        if (manualForward) {
+                            bot.setControlState('forward', true);
+                            // اگه جلوی پایش بلاک یا پورتال بود خودکار بپره تا رد بشه
+                            if (bot.entity && bot.entity.isCollidedHorizontally) {
+                                bot.setControlState('jump', true);
+                            } else {
+                                bot.setControlState('jump', false);
+                            }
+                        } else {
+                            clearInterval(forwardInterval);
+                        }
+                    }, 100);
                 }, 2000);
 
-                portalsEntered = 0;
-                isInMainMap = false;
                 waitingForTpaConfirm = false;
                 targetPlayer = null;
-
-                setTimeout(() => { findAndEnterPortal(bot); }, 5000);
             });
 
-            async function findAndEnterPortal(bot) {
-                // چک کردن رادار موقعیت (اگر رندوم اسپاون شده باشیم مختصات بسیار بزرگ است)
-                if (bot.entity && bot.entity.position) {
-                    if (Math.abs(bot.entity.position.x) > 300 || Math.abs(bot.entity.position.z) > 300) {
-                        isInMainMap = true;
-                        console.log('=== 🎉 تشخیص خودکار رادار: بات به دلیل مختصات بالا در مپ اصلی است ===');
-                        return;
-                    }
-                }
-
-                if (isInMainMap || portalsEntered >= 2) return;
-                console.log(`🔍 در حال جستجوی پورتال ندر... (مرحله ${portalsEntered + 1})`);
-                
-                const portalBlock = bot.findBlock({
-                    matching: bot.registry.blocksByName['nether_portal'].id,
-                    maxDistance: 32
-                });
-
-                if (portalBlock) {
-                    console.log(`📍 پورتال در مختصات ${portalBlock.position} پیدا شد. حرکت...`);
-                    const mcData = require('minecraft-data')(bot.version);
-                    const movements = new Movements(bot, mcData);
-                    movements.canDig = false;
-                    bot.pathfinder.setMovements(movements);
-                    bot.pathfinder.setGoal(new GoalBlock(portalBlock.position.x, portalBlock.position.y, portalBlock.position.z));
-
-                    // حلقه هل دادن فیزیکی بات به داخل پورتال برای جلوگیری از متوقف شدن پشت لبه بلاک
-                    const pushInterval = setInterval(() => {
-                        if (!bot.entity || isInMainMap) {
-                            clearInterval(pushInterval);
-                            return;
-                        }
-                        const dist = bot.entity.position.distanceTo(portalBlock.position);
-                        if (dist < 2) {
-                            bot.lookAt(portalBlock.position.offset(0.5, 1, 0.5));
-                            bot.setControlState('forward', true);
-                        }
-                        if (dist < 0.6) {
-                            clearInterval(pushInterval);
-                        }
-                    }, 400);
-                } else {
-                    setTimeout(() => findAndEnterPortal(bot), 4000);
-                }
-            }
-
-            // مدیریت تمام جابه‌جایی‌ها و تلپورت‌های اجباری سرور (کاملا هوشمند)
             bot.on('forcedMove', () => {
-                // ۱. فرآیند TPA معمولی در مپ اصلی
+                // فرآیند TPA معمولی فقط در مپ اصلی
                 if (isInMainMap) {
                     if (waitingForTpaConfirm && targetPlayer) {
                         waitingForTpaConfirm = false;
@@ -195,33 +155,29 @@ jobs:
                             targetPlayer = null;
                         }, 1500);
                     }
-                    return;
-                }
-
-                // ۲. فرآیند رد کردن لابی‌ها و پورتال‌ها
-                bot.clearControlStates(); // ریست کردن کلیدهای حرکتی بعد از تلپورت
-                const now = Date.now();
-                if (now - lastPortalTime < 2000) return; // جلوگیری از دبل‌کانت پکت‌های همزمان
-                lastPortalTime = now;
-
-                portalsEntered++;
-                console.log(`🌌 تلپورت سرور ثبت شد! فاز لابی: ${portalsEntered} | مختصات الحالي: X:${Math.round(bot.entity.position.x)} Z:${Math.round(bot.entity.position.z)}`);
-
-                // اگر ۲ پورتال رد شده باشد یا مختصات از محدوده لابی (۳۰۰ بلاک) خارج شده باشد
-                if (portalsEntered >= 2 || Math.abs(bot.entity.position.x) > 300 || Math.abs(bot.entity.position.z) > 300) {
-                    isInMainMap = true;
-                    console.log('=== 🎉 سیستم با موفقیت ورود بات به مپ اصلی (Main Map) را تایید کرد! ===');
-                    bot.pathfinder.setGoal(null);
-                } else {
-                    setTimeout(() => findAndEnterPortal(bot), 4000);
                 }
             });
 
             bot.on('chat', async (username, message) => {
                 if (username === bot.username) return;
+
+                // 👑 دستور توقف ویژه از طرف اکانت اصلی شما
+                if (username === 'pvp_HS' && message === 'pvp_HSbot STOP') {
+                    manualForward = false;
+                    isInMainMap = true;
+                    if (forwardInterval) clearInterval(forwardInterval);
+                    bot.clearControlStates(); // ریست کردن تمام کلیدها و ترمز کامل
+                    console.log('🛑 ترمز دستی! دویدن مستقیم متوقف شد. بات مستقر در مپ اصلی و آماده دستورات.');
+                    return;
+                }
+
+                // سایر دستورات فقط بعد از زدن استاپ و استقرار در مپ اصلی کار میکنند
+                if (!isInMainMap) return;
+
                 if (message === 'pvp_HS tpa') {
                     bot.chat(`/tpa ${username}`);
                 }
+                
                 if (message === 'pvp_HS totem' || message === 'pvp_HSkit') {
                     const chestBlock = bot.findBlock({
                         matching: [bot.registry.blocksByName['chest'].id, bot.registry.blocksByName['trapped_chest'].id],
@@ -271,7 +227,7 @@ jobs:
                     }
                 }
                 console.log('\n======================================================================');
-                console.log('⚠️ ⚠️ ⚠️  ALERT: KICKED FROM SERVER (کد وریفای در زیر است)  ⚠️ ⚠️ ⚠️');
+                console.log('⚠️ ⚠️ ⚠️  ALERT: KICKED FROM SERVER  ⚠️ ⚠️ ⚠️');
                 console.log('داداش سرور بات رو کیک کرد. متن کامل پیام کیک:');
                 console.log('----------------------------------------------------------------------');
                 console.log(kickMessage);
@@ -279,6 +235,7 @@ jobs:
             });
 
             bot.on('end', (reason) => {
+                if (forwardInterval) clearInterval(forwardInterval);
                 console.log('\n======================================================================');
                 console.log(`🛑 ارتباط قطع شد (end). دلیل: ${reason}`);
                 printTunnelLink();
