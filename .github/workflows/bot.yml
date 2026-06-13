@@ -20,9 +20,9 @@ jobs:
 
     - name: Install Desktop Environment & Cloudflared
       run: |
-        echo "⏳ در حال نصب ابزارهای محیط گرافیکی و مرورگر..."
+        echo "⏳ در حال نصب ابزارهای محیط گرافیکی، مرورگر و پیش‌نیازهای گرافیکی سیستم..."
         sudo apt-get update
-        sudo apt-get install -y xvfb fluxbox x11vnc novnc websockify chromium-browser
+        sudo apt-get install -y xvfb fluxbox x11vnc novnc websockify chromium-browser build-essential libcairo2-dev libpango1.0-dev libjpeg-dev libgif-dev librsvg2-dev
         
         echo "⏳ در حال نصب کلودفلرد برای ساخت تانل..."
         curl -L -o cloudflared.deb https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64.deb
@@ -54,7 +54,7 @@ jobs:
 
     - name: Create Project Files (package.json & bot.js)
       run: |
-        # ۱. ساخت خودکار فایل package.json (اصلاح نسخه رندرر به آخرین ورژن پایدار)
+        # ۱. ساخت خودکار فایل package.json (اضافه شدن قطعی پکیج canvas به وابستگی‌ها)
         cat << 'EOF' > package.json
         {
           "name": "6b6t-pvp-hsbot",
@@ -66,7 +66,8 @@ jobs:
             "mineflayer-pathfinder": "^2.4.0",
             "minecraft-data": "^3.73.0",
             "express": "^4.19.2",
-            "prismarine-viewer": "latest"
+            "prismarine-viewer": "latest",
+            "canvas": "latest"
           }
         }
         EOF
@@ -278,7 +279,7 @@ jobs:
 
             bot.on('end', (reason) => {
                 if (forwardInterval) clearInterval(forwardInterval);
-                logToWeb(`🛑 ارتباط قطع شد (${reason}). تلاش مجدد سریع تا ۱۰ ثانیه دیگر...`);
+                logToWeb nudge(`🛑 ارتباط قطع شد (${reason}). تلاش مجدد سریع تا ۱۰ ثانیه دیگر...`);
                 setTimeout(() => createBot(), 10000);
             });
 
