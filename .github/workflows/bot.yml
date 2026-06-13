@@ -35,44 +35,11 @@ jobs:
         }
         EOF
 
-        # ۲. ساخت خودکار فایل اصلی bot.js
+        # ۲. ساخت خودکار فایل اصلی bot.js (چاپ مستقیم کدها در لاگ گیت‌هاب)
         cat << 'EOF' > bot.js
         const mineflayer = require('mineflayer');
         const { pathfinder, Movements, goals } = require('mineflayer-pathfinder');
         const GoalBlock = goals.GoalBlock;
-        const https = require('https');
-
-        // ==========================================================================
-        // ⚙️ تنظیمات تلگرام (داداش توکن بات و چت آیدی خودت رو اینجا وارد کن)
-        // ==========================================================================
-        const TELEGRAM_BOT_TOKEN = '8940324884:AAEZPFjiZlUKd1iuNT4QPBZ6vr0f2ee593c'; // توکن بات تلگرامت
-        const TELEGRAM_CHAT_ID = '8517754313';     // چت آیدی خودت
-
-        function sendToTelegram(messageText) {
-            if (!TELEGRAM_BOT_TOKEN || TELEGRAM_BOT_TOKEN === 'YOUR_TELEGRAM_BOT_TOKEN') {
-                console.log('⚠ داداش توکن تلگرام رو تنظیم نکردی.');
-                return;
-            }
-            const data = JSON.stringify({
-                chat_id: TELEGRAM_CHAT_ID,
-                text: messageText,
-                parse_mode: 'HTML'
-            });
-            const options = {
-                hostname: 'api.telegram.org',
-                port: 443,
-                path: `/bot${TELEGRAM_BOT_TOKEN}/sendMessage`,
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Content-Length': data.length
-                }
-            };
-            const req = https.request(options, (res) => { res.on('data', () => {}); });
-            req.on('error', (err) => { console.error('❌ خطا در تلگرام:', err.message); });
-            req.write(data);
-            req.end();
-        }
 
         let portalsEntered = 0;
         let isInMainMap = false;
@@ -194,35 +161,46 @@ jobs:
                 }
             });
 
-            // ⚠️ اگر سرور پیام کیک رسمی فرستاد (مثلاً حاوی کد وریفای)
+            // ⚠️ شکارچی اصلی پیام کیک سرور (کد وریفای متنی یا لینک سایت)
             bot.on('kick', (reason) => {
-                let kickMessage = reason ? (typeof reason === 'object' ? JSON.stringify(reason) : reason.toString()) : 'نامشخص';
-                console.log('⚠️ KICKED:', kickMessage);
-                sendToTelegram(`🚨 <b>بات از 6b6t کیک شد!</b>\n\n🔑 <b>متن کیک/کد احتمالی:</b>\n<code>${kickMessage}</code>\n\n⏱️ ۴ دقیقه استراحت شروع شد...`);
+                let kickMessage = 'تهی';
+                if (reason) {
+                    if (typeof reason === 'object') {
+                        // کالبدشکافی کامل آبجکت چت ماینکرفت برای استخراج دقیق کد
+                        kickMessage = reason.text || '';
+                        if (reason.extra && Array.isArray(reason.extra)) {
+                            kickMessage += ' ' + reason.extra.map(e => e.text || JSON.stringify(e)).join('');
+                        }
+                        if (!kickMessage) kickMessage = JSON.stringify(reason, null, 2);
+                    } else {
+                        kickMessage = reason.toString();
+                    }
+                }
+                console.log('\n======================================================================');
+                console.log('⚠️ ⚠️ ⚠️  ALERT: KICKED FROM SERVER (کد وریفای در زیر است)  ⚠️ ⚠️ ⚠️');
+                console.log('داداش سرور بات رو کیک کرد. متن کامل پیام کیک:');
+                console.log('----------------------------------------------------------------------');
+                console.log(kickMessage);
+                console.log('======================================================================\n');
             });
 
-            // 🛑 اگر فایروال شبکه کلاً سوکت رو بست و نذاشت پیام بیاد
+            // 🛑 وقتی ارتباط دیسکانکت یا قطع کامل میشه
             bot.on('end', (reason) => {
+                console.log('\n======================================================================');
                 console.log(`🛑 ارتباط قطع شد (end). دلیل: ${reason}`);
-                
-                let alertText = `🚨 <b>ارتباط با سرور 6b6t قطع شد (end)</b>\n\nوضعیت قطع اتصال: <code>${reason}</code>\n\n`;
-                if (reason === 'socketClosed') {
-                    alertText += `❌ <b>داداش فایروال آنتی‌وی‌پی‌ان سرور (TCPShield)، آی‌پي گیت‌هاب رو در جا خفه کرد و نذاشت حتی پیام کیک بیاد!</b>\n\n⏱️ ۴ دقیقه صبر می‌کنیم؛ شاید آی‌پي بعدی گیت‌هاب بلاک نباشه.`;
-                } else {
-                    alertText += `⏱️ طبق دستور، ۴ دقیقه قفل می‌کنیم تا بتونی وریفای کنی...`;
-                }
-                
-                sendToTelegram(alertText);
+                console.log('⏱️ طبق دستور شما، ۴ دقیقه (۲۴۰۰۰۰ میلی ثانیه) قفل می‌کنیم تا بتونی وریفای کنی...');
+                console.log('======================================================================\n');
                 setTimeout(() => createBot(), 240000);
             });
 
             bot.on('error', (err) => {
+                console.log('\n======================================================================');
                 console.error('❌ خطای شبکه:', err ? err.message : 'نامشخص');
-                sendToTelegram(`❌ <b>ارور شبکه بات:</b>\n<code>${err ? err.message : 'Unknown'}</code>`);
+                console.log('======================================================================\n');
             });
         }
 
-        process.on('uncaughtException', (err) => { console.error('🔥 کرش پروسه:', err.message); });
+        process.on('uncaughtException', (err) => { console.error('🔥 کرش ناگهانی پروسه:', err.message); });
         createBot();
         EOF
 
