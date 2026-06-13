@@ -1,0 +1,11 @@
+{
+  "name": "6b6t-pvp-hsbot",
+  "version": "1.0.0",
+  "description": "Advanced Anarchy Bot for 6b6t",
+  "main": "bot.js",
+  "dependencies": {
+    "mineflayer": "^4.20.0",
+    "mineflayer-pathfinder": "^2.4.0",
+    "minecraft-data": "^3.73.0"
+  }
+}
