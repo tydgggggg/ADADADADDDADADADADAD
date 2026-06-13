@@ -44,7 +44,6 @@ jobs:
         websockify --web /usr/share/novnc 6080 127.0.0.1:5900 &
         sleep 4
         
-        # تنظیم کرومیوم برای باز کردن مستقیم داشبورد کنترل بات روی پورت 3000
         chromium-browser --no-sandbox --disable-setuid-sandbox http://127.0.0.1:3000 &
         sleep 3
         
@@ -55,26 +54,28 @@ jobs:
 
     - name: Create Project Files (package.json & bot.js)
       run: |
-        # ۱. ساخت خودکار فایل package.json (اضافه شدن express برای وب‌سرور)
+        # ۱. ساخت خودکار فایل package.json (اضافه شدن ماژول رندرر دید بات)
         cat << 'EOF' > package.json
         {
           "name": "6b6t-pvp-hsbot",
           "version": "1.0.0",
-          "description": "Advanced Anarchy Bot with Web Controller",
+          "description": "Autonomous Intelligent Anarchy Bot for 6b6t with 3D Live View",
           "main": "bot.js",
           "dependencies": {
             "mineflayer": "^4.20.0",
             "mineflayer-pathfinder": "^2.4.0",
             "minecraft-data": "^3.73.0",
-            "express": "^4.19.2"
+            "express": "^4.19.2",
+            "prismarine-viewer": "^2.7.0"
           }
         }
         EOF
 
-        # ۲. ساخت خودکار فایل اصلی bot.js مجهز به داشبورد وب زنده
+        # ۲. ساخت خودکار فایل هوشمند اصلی bot.js مجهز به گرافیک زنده و رندرر اول شخص
         cat << 'EOF' > bot.js
         const mineflayer = require('mineflayer');
         const { pathfinder, Movements, goals } = require('mineflayer-pathfinder');
+        const { mineflayer: mineflayerViewer } = require('prismarine-viewer');
         const express = require('express');
         const app = express();
 
@@ -86,7 +87,11 @@ jobs:
         let autoMode = false;
         let waitingForTpaConfirm = false;
         let targetPlayer = null;
+        let forwardInterval = null;
         let chatLogs = [];
+        
+        // سیستم هوشمند تشخیص مپ بر اساس تراکم چت پلیرها
+        let uniqueChatters = new Set();
 
         function logToWeb(msg) {
             const timestamp = new Date().toLocaleTimeString();
@@ -111,8 +116,18 @@ jobs:
         }
 
         function createBot() {
-            logToWeb('🚀 در حال ایجاد اتصال کلاینت ماینکرفت به 6b6t.org...');
+            // بستن سرور مانیتورینگ دید بات قدیمی جهت جلوگیری از خطای تداخل پورت (مهم برای اتصال مجدد سریع)
+            if (bot && bot.viewer) {
+                try {
+                    bot.viewer.close();
+                    logToWeb('🔄 سیستم رندرر گرافیکی قدیمی با موفقیت ریست شد.');
+                } catch(e) {}
+            }
+
+            logToWeb('🚀 در حال راه‌اندازی هسته خودمختار بات و اتصال به سرور 6b6t...');
             printTunnelLink();
+            
+            uniqueChatters.clear();
             
             bot = mineflayer.createBot({
                 host: '6b6t.org',
@@ -124,21 +139,58 @@ jobs:
             bot.loadPlugin(pathfinder);
 
             bot.once('connect', () => {
-                logToWeb('🔌 سوکت اولیه شبکه باز شد. در حال ارسال پکت هندشیک...');
+                logToWeb('🔌 سوکت اولیه شبکه باز شد. ارسال پکت هندشیک...');
                 if (bot._client) {
+                    bot._client.removeAllListeners('disconnect');
                     bot._client.on('disconnect', (packet) => {
-                        logToWeb(`⚠️ [پکت دیسکانکت خام] دریافت شد:\n${JSON.stringify(packet, null, 2)}`);
+                        logToWeb(`⚠️ [پکت دیسکانکت خام سرور] دریافت شد:\n${JSON.stringify(packet, null, 2)}`);
                     });
                 }
             });
 
             bot.on('spawn', () => {
-                logToWeb('✅ بات وارد سرور شد. پنل وب آماده کنترل دستی و ورود رمز است.');
+                logToWeb('✅ بات اسپان شد. شروع عملیات عبور اتوماتیک از پورتال‌ها...');
+                
+                // راه‌اندازی موتور رندرر دید اول شخص بازی روی پورت داخلی 3007
+                setTimeout(() => {
+                    if (!bot.viewer) {
+                        try {
+                            mineflayerViewer(bot, { port: 3007, firstPerson: true });
+                            logToWeb('👁️ موتور گرافیکی سه‌بعدی (Bot View) روی پورت داخلی مستقر شد.');
+                        } catch (err) {
+                            logToWeb(`⚠️ خطا در ساخت رندرر گرافیکی: ${err.message}`);
+                        }
+                    }
+                }, 1000);
+
                 if (!autoMode) {
                     isInMainMap = false;
                 }
                 waitingForTpaConfirm = false;
                 targetPlayer = null;
+
+                setTimeout(() => {
+                    bot.chat('/login AZHAN8585@#@#ABOL1234');
+                    logToWeb('➡ دستور لاگین ارسال شد.');
+
+                    if (!isInMainMap) {
+                        logToWeb('🏃‍♂️ سیستم ناوبری فعال شد: دویدن مستقیم رو به جلو و پرش هوشمند برای رد کردن پورتال لابی...');
+                        if (forwardInterval) clearInterval(forwardInterval);
+                        
+                        forwardInterval = setInterval(() => {
+                            if (!isInMainMap) {
+                                bot.setControlState('forward', true);
+                                if (bot.entity && bot.entity.isCollidedHorizontally) {
+                                    bot.setControlState('jump', true);
+                                } else {
+                                    bot.setControlState('jump', false);
+                                }
+                            } else {
+                                clearInterval(forwardInterval);
+                            }
+                        }, 100);
+                    }
+                }, 2000);
             });
 
             bot.on('forcedMove', () => {
@@ -156,18 +208,27 @@ jobs:
             bot.on('chat', async (username, message) => {
                 if (username === bot.username) return;
 
-                // 👑 مدیریت سوییچ حالت‌ها از طریق چت بازی توسط اکانت اصلی تو
-                if (username === 'pvp_HS') {
-                    if (message === 'pvp_HSbot STOP') {
-                        autoMode = false;
-                        isInMainMap = false;
-                        if (bot) bot.clearControlStates();
-                        logToWeb('🛑 ترمز چت بازی فعال شد! حالت اتوماتیک خاموش و کنترل به داشبورد وب بازگشت.');
-                        return;
+                if (username === 'pvp_HS' && message === 'pvp_HSbot STOP') {
+                    autoMode = false;
+                    isInMainMap = false;
+                    uniqueChatters.clear();
+                    if (forwardInterval) clearInterval(forwardInterval);
+                    if (bot) bot.clearControlStates();
+                    logToWeb('🛑 ترمز دستی چت بازی کشیده شد. حالت خودکار خاموش و کنترل دستی پنل باز شد.');
+                    return;
+                }
+
+                if (!isInMainMap) {
+                    uniqueChatters.add(username);
+                    if (uniqueChatters.size >= 4) {
+                        isInMainMap = true;
+                        autoMode = true;
+                        if (forwardInterval) clearInterval(forwardInterval);
+                        bot.clearControlStates();
+                        logToWeb(`🧠 [هوش محیطی]: تعداد ${uniqueChatters.size} پلیر فعال در چت شناسایی شدند! ورود به مپ اصلی قطعی است. حرکت خودکار متوقف و AUTO MODE فعال شد.`);
                     }
                 }
 
-                // سایر دستورات خودکار فقط در صورت فعال بودن AUTO MODE کار میکنند
                 if (!autoMode || !isInMainMap) return;
 
                 if (message === 'pvp_HS tpa') {
@@ -203,8 +264,9 @@ jobs:
             });
 
             bot.on('message', (jsonMsg) => {
-                logToWeb(jsonMsg.toString());
                 const msg = jsonMsg.toString();
+                logToWeb(msg);
+                
                 if (autoMode && (msg.includes('has requested to teleport to you') || msg.includes('tpa'))) {
                     bot.chat('/tpaccept');
                 }
@@ -215,17 +277,19 @@ jobs:
             });
 
             bot.on('end', (reason) => {
-                logToWeb(`🛑 ارتباط به طور کامل پایان یافت (${reason}). بازنشانی تا ۴ دقیقه دیگر...`);
-                setTimeout(() => createBot(), 240000);
+                if (forwardInterval) clearInterval(forwardInterval);
+                // ⏱️ کاهش تایمر بازنشانی کانکت به ۱۰ ثانیه طبق دستور تو داداش گلم
+                logToWeb(`🛑 ارتباط قطع شد (${reason}). تلاش مجدد سریع تا ۱۰ ثانیه دیگر...`);
+                setTimeout(() => createBot(), 10000);
             });
 
             bot.on('error', (err) => {
-                logToWeb(`❌ خطای شبکه کلاینت: ${err ? err.message : 'نامشخص'}`);
+                logToWeb(`❌ خطای کلاینت: ${err ? err.message : 'نامشخص'}`);
             });
         }
 
         // =====================================================================
-        // 🌐 بخش بک‌اند وب‌سرور پنل گرافیکی داشبورد
+        // 🌐 پنل مانیتورینگ پیشرفته وب مجهز به سوییچ دید ۳بعدی بازی
         // =====================================================================
         app.get('/', (req, res) => {
             res.send(`
@@ -233,90 +297,81 @@ jobs:
             <html dir="rtl">
             <head>
                 <meta charset="UTF-8">
-                <meta name="viewport" content="width=device-width, initial-scale=1.0">
-                <title>داشبورد مدیریتی pvp_HSbot</title>
+                <title>سیستم خودمختار pvp_HSbot</title>
                 <style>
-                    body { background: #121212; color: #e0e0e0; font-family: Tahoma, Arial; margin: 15px; text-align: center; }
+                    body { background: #121212; color: #e0e0e0; font-family: Tahoma; margin: 15px; text-align: center; }
                     h2 { color: #4caf50; margin-bottom: 5px; }
-                    #stats { background: #1e1e1e; padding: 10px; border-radius: 8px; margin-bottom: 10px; font-size: 13px; border: 1px solid #333; text-align: right; }
+                    #stats { background: #1e1e1e; padding: 12px; border-radius: 8px; margin-bottom: 10px; font-size: 13px; text-align: right; border: 1px solid #333; }
                     #console { background: #000; color: #00ff00; border: 1px solid #444; height: 260px; overflow-y: scroll; padding: 10px; font-family: monospace; text-align: left; border-radius: 6px; font-size: 12px; margin-bottom: 10px; }
-                    .input-area { display: flex; gap: 8px; margin-bottom: 15px; }
-                    input[type="text"] { flex: 1; padding: 10px; background: #222; border: 1px solid #444; color: #fff; border-radius: 5px; font-family: monospace; }
-                    .btn { background: #333; color: white; border: 1px solid #555; padding: 10px 20px; border-radius: 5px; cursor: pointer; font-weight: bold; }
+                    .btn { background: #333; color: white; border: 1px solid #555; padding: 10px 20px; border-radius: 5px; cursor: pointer; font-weight: bold; margin: 4px; }
                     .btn:active { background: #555; }
-                    .pad { display: grid; grid-template-columns: repeat(3, 55px); gap: 8px; justify-content: center; margin: 10px auto; }
-                    .pad button { background: #2e7d32; color: white; border: none; padding: 15px; font-size: 16px; font-weight: bold; border-radius: 6px; cursor: pointer; user-select: none; }
-                    .pad button:active { background: #1b5e20; }
-                    #btn-auto { background: #c62828; color: white; width: 100%; max-width: 300px; padding: 14px; font-size: 16px; font-weight: bold; border: none; border-radius: 8px; cursor: pointer; margin-top: 15px; box-shadow: 0 4px 6px rgba(0,0,0,0.3); }
-                    #btn-auto.active { background: #2e7d32; cursor: not-allowed; }
+                    .pad { display: grid; grid-template-columns: repeat(3, 52px); gap: 6px; justify-content: center; margin: 10px auto; }
+                    .pad button { background: #2e7d32; color: white; border: none; padding: 12px; font-size: 15px; font-weight: bold; border-radius: 6px; cursor: pointer; }
+                    #viewer-frame { display: none; width: 100%; height: 75vh; border: 2px solid #444; border-radius: 8px; background: #000; margin-top: 10px; }
                 </style>
             </head>
             <body>
-                <h2>🎮 پنل کنترل زنده بات</h2>
-                <div id="stats">در حال بارگذاری اطلاعات سرور...</div>
-                <div id="console"></div>
+                <h2 id="main-title">🤖 پنل هوشمند و رندرر گرافیکی بات</h2>
                 
-                <div class="input-area">
-                    <input type="text" id="cmd" placeholder="ارسال چت یا کامند... (مثال: /login رمز)">
-                    <button class="btn" onclick="sendCmd()">ارسال</button>
-                </div>
+                <button id="btn-view-bot" class="btn" style="background: #0288d1; width: 100%; max-width: 320px; padding: 12px; font-size: 15px;" onclick="toggleView('bot')">👁️ مشاهده دید ۳بعدی بازی (Bot View)</button>
+                <button id="btn-back" class="btn" style="display:none; background:#c62828; width: 100%; max-width: 320px; padding: 12px; font-size: 15px;" onclick="toggleView('dashboard')">🔙 بازگشت به کنترل پنل لاگ‌ها</button>
 
-                <div style="font-size: 13px; color: #aaa;">🕹️ جهت نگاه رو از noVNC بچرخون و از دکمه‌ها یا کلیدهای WASD/Space کیبورد استفاده کن:</div>
-                <div class="pad">
-                    <div></div><button onmousedown="move('forward',true)" onmouseup="move('forward',false)" ontouchstart="move('forward',true)" ontouchend="move('forward',false)">W</button><div></div>
-                    <button onmousedown="move('left',true)" onmouseup="move('left',false)" ontouchstart="move('left',true)" ontouchend="move('left',false)">A</button>
-                    <button onmousedown="move('back',true)" onmouseup="move('back',false)" ontouchstart="move('back',true)" ontouchend="move('back',false)">S</button>
-                    <button onmousedown="move('right',true)" onmouseup="move('right',false)" ontouchstart="move('right',true)" ontouchend="move('right',false)">D</button>
-                    <div></div><button onmousedown="move('jump',true)" onmouseup="move('jump',false)" ontouchstart="move('jump',true)" ontouchend="move('jump',false)">✈️</button><div></div>
-                </div>
+                <iframe id="viewer-frame" src="about:blank"></iframe>
 
-                <button id="btn-auto" onclick="startAuto()">🚀 فعال‌سازی حالت خودکار (AUTO MODE)</button>
+                <div id="dashboard-wrapper">
+                    <div id="stats" style="margin-top: 10px;">در حال دریافت داده‌ها...</div>
+                    <div id="console"></div>
+                    
+                    <div class="pad">
+                        <div></div><button onmousedown="move('forward',true)" onmouseup="move('forward',false)">W</button><div></div>
+                        <button onmousedown="move('left',true)" onmouseup="move('left',false)">A</button>
+                        <button onmousedown="move('back',true)" onmouseup="move('back',false)">S</button>
+                        <button onmousedown="move('right',true)" onmouseup="move('right',false)">D</button>
+                        <div></div><button onmousedown="move('jump',true)" onmouseup="move('jump',false)">✈️</button><div></div>
+                    </div>
+                </div>
 
                 <script>
-                    const keyMap = { 'w': 'forward', 's': 'back', 'a': 'left', 'd': 'right', ' ': 'jump' };
-                    let activeKeys = {};
-
-                    window.addEventListener('keydown', (e) => {
-                        let k = e.key.toLowerCase();
-                        if (keyMap[k] && !activeKeys[k] && document.activeElement.tagName !== 'INPUT') {
-                            activeKeys[k] = true; move(keyMap[k], true);
-                        }
-                    });
-                    window.addEventListener('keyup', (e) => {
-                        let k = e.key.toLowerCase();
-                        if (keyMap[k] && document.activeElement.tagName !== 'INPUT') {
-                            activeKeys[k] = false; move(keyMap[k], false);
-                        }
-                    });
-
                     function move(action, state) {
                         fetch('/api/move', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ action, state }) });
                     }
-                    function sendCmd() {
-                        let el = document.getElementById('cmd'); if(!el.value) return;
-                        fetch('/api/cmd', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ cmd: el.value }) });
-                        el.value = '';
-                    }
-                    function startAuto() {
-                        if (confirm('داش گلم مطمئنی؟ با فعال شدن اتوماتیک، کلیدهای وب قفل شده و بات منتظر دیسکورد یا دستور چت pvp_HS میمونه.')) {
-                            fetch('/api/auto', { method: 'POST' }).then(() => {
-                                let b = document.getElementById('btn-auto'); b.innerText = 'حالت خودکار فعال است ✅'; b.className = 'active'; b.disabled = true;
-                            });
+
+                    // 👑 منطق سوییچ هوشمند بین پنل متنی و دید سه‌بعدی داخل آدرس
+                    function toggleView(mode) {
+                        const wrapper = document.getElementById('dashboard-wrapper');
+                        const frame = document.getElementById('viewer-frame');
+                        const btnView = document.getElementById('btn-view-bot');
+                        const btnBack = document.getElementById('btn-back');
+                        
+                        if (mode === 'bot') {
+                            wrapper.style.display = 'none';
+                            btnView.style.display = 'none';
+                            frame.src = 'http://127.0.0.1:3007'; // لود زنده موتور گرافیکی بازی
+                            frame.style.display = 'block';
+                            btnBack.style.display = 'inline-block';
+                        } else {
+                            frame.src = 'about:blank';
+                            frame.style.display = 'none';
+                            btnBack.style.display = 'none';
+                            wrapper.style.display = 'block';
+                            btnView.style.display = 'inline-block';
                         }
                     }
 
                     setInterval(() => {
-                        fetch('/api/status').then(r => r.json()).then(d => {
-                            document.getElementById('stats').innerHTML = '📍 <b>موقعیت بات:</b> X: ' + d.pos.x + ' | Y: ' + d.pos.y + ' | Z: ' + d.pos.z + ' <br>⚙️ <b>وضعیت سیستم:</b> ' + (d.autoMode ? '<span style="color:#4caf50">اتوماتیک (AUTO)</span>' : '<span style="color:#ff9800">کنترل دستی وب</span>');
-                            let c = document.getElementById('console'); c.innerHTML = d.logs.map(l => '<div>' + l + '</div>').join('');
-                            c.scrollTop = c.scrollHeight;
-                            if (d.autoMode) {
-                                let b = document.getElementById('btn-auto'); b.innerText = 'حالت خودکار فعال است ✅'; b.className = 'active'; b.disabled = true;
-                            } else {
-                                let b = document.getElementById('btn-auto'); b.innerText = '🚀 فعال‌سازی حالت خودکار (AUTO MODE)'; b.className = ''; b.disabled = false;
-                            }
-                        });
-                    }, 800);
+                        if (document.getElementById('dashboard-wrapper').style.display !== 'none') {
+                            fetch('/api/status').then(r => r.json()).then(d => {
+                                document.getElementById('stats').innerHTML = 
+                                    '📍 <b>موقعیت فعلی:</b> X: ' + d.pos.x + ' | Y: ' + d.pos.y + ' | Z: ' + d.pos.z + 
+                                    '<br>📊 <b>تعداد پلیرهای فعال در چت:</b> ' + d.chatterCount + ' از 4' +
+                                    '<br>⚙️ <b>وضعیت فاز عملیاتی:</b> ' + (d.autoMode ? '<span style="color:#4caf50;font-weight:bold;">مستقر در مپ اصلی (AUTO)</span>' : '<span style="color:#ff9800;font-weight:bold;">در حال عبور هوشمند از لابی...</span>');
+                                
+                                let c = document.getElementById('console');
+                                c.innerHTML = d.logs.map(l => '<div>' + l + '</div>').join('');
+                                c.scrollTop = c.scrollHeight;
+                            });
+                        }
+                    }, 1000);
                 </script>
             </body>
             </html>
@@ -328,16 +383,7 @@ jobs:
             if (bot && bot.entity && bot.entity.position) {
                 pos = { x: Math.round(bot.entity.position.x), y: Math.round(bot.entity.position.y), z: Math.round(bot.entity.position.z) };
             }
-            res.json({ pos, autoMode, logs: chatLogs });
-        });
-
-        app.post('/api/cmd', (req, res) => {
-            const { cmd } = req.body;
-            if (bot && cmd) {
-                bot.chat(cmd);
-                logToWeb(`[Web Control] Sending Command: ${cmd}`);
-            }
-            res.sendStatus(200);
+            res.json({ pos, autoMode, logs: chatLogs, chatterCount: uniqueChatters.size });
         });
 
         app.post('/api/move', (req, res) => {
@@ -348,19 +394,11 @@ jobs:
             res.sendStatus(200);
         });
 
-        app.post('/api/auto', (req, res) => {
-            autoMode = true;
-            isInMainMap = true;
-            if (bot) bot.clearControlStates();
-            logToWeb('⚡ حالت AUTO MODE از داشبورد فعال شد! کلیدهای حرکتی وب غیرفعال شدند.');
-            res.sendStatus(200);
-        });
-
         app.listen(3000, () => {
-            console.log('🌐 داشبورد کنترل وب روی پورت 3000 با موفقیت مستقر شد.');
+            console.log('🌐 وب سرور مانیتورینگ روی پورت 3000 فعال شد.');
         });
 
-        process.on('uncaughtException', (err) => { console.error('🔥 کرش ناگهانی پروسه:', err.message); });
+        process.on('uncaughtException', (err) => { console.error('🔥 کرش پروسه:', err.message); });
         createBot();
         EOF
 
@@ -375,6 +413,7 @@ jobs:
           grep -o 'https://[^ ]*trycloudflare.com' /tmp/cloudflare.log || echo "لینک موقت یافت نشد"
           echo "----------------------------------------------------------------------"
           node bot.js
-          echo "بات متوقف شد یا کرش کرد. طبق دستور، ۴ دقیقه (۲۴۰ ثانیه) تا راه اندازی مجدد صبر میکنیم..."
-          sleep 240
+          # ⏱️ کاهش تایمر کرش حلقه نگهبان گیت‌هاب به ۱۰ ثانیه
+          echo "بات متوقف شد یا کرش کرد. طبق دستور، ۱۰ ثانیه تا راه اندازی مجدد صبر میکنیم..."
+          sleep 10
         done
