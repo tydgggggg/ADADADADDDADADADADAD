@@ -1,0 +1,31 @@
+name: Run 6b6t Anarchy Bot 24/7
+
+on:
+  push:
+    branches: [ "main" ]
+  workflow_dispatch:
+
+jobs:
+  run-bot:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout Repository
+      uses: actions/checkout@v4
+
+    - name: Set up Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20'
+
+    - name: Install Dependencies
+      run: npm install
+
+    - name: Run Bot in Infinite Loop
+      run: |
+        echo "=== در حال اجرای بات با قابلیت خود-ترمیمی زنده ==="
+        while true; do
+          node bot.js
+          echo "بات متوقف شد یا کرش کرد. راه اندازی مجدد در ۱۵ ثانیه..."
+          sleep 15
+        done
