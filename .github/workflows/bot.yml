@@ -69,7 +69,7 @@ jobs:
         }
         EOF
 
-        # ۲. ساخت خودکار فایل اصلی bot.js (سیستم دویدن مستقیم و کنترل دستی)
+        # ۲. ساخت خودکار فایل اصلی bot.js (به همراه بازگشت پکت لیسنر خام)
         cat << 'EOF' > bot.js
         const mineflayer = require('mineflayer');
         const { pathfinder, Movements, goals } = require('mineflayer-pathfinder');
@@ -110,8 +110,17 @@ jobs:
 
             bot.loadPlugin(pathfinder);
 
+            // 👑 بازگشت پکت لیسنر خام شبکه برای دریافت کدهای وریفای مخفی
             bot.once('connect', () => {
                 console.log('🔌 سوکت اولیه شبکه باز شد. در حال ارسال پکت هندشیک...');
+                if (bot._client) {
+                    bot._client.on('disconnect', (packet) => {
+                        console.log('\n======================================================================');
+                        console.log('⚠️ پکت دیسکانکت خام از سرور دریافت شد (کد وریفای احتمالی در زیر است):');
+                        console.log(JSON.stringify(packet, null, 2));
+                        console.log('======================================================================\n');
+                    });
+                }
             });
 
             bot.on('spawn', () => {
@@ -124,12 +133,10 @@ jobs:
                     manualForward = true;
                     isInMainMap = false;
                     
-                    // حلقه فعال نگه داشتن حرکت رو به جلو و پرش در صورت برخورد با موانع
                     if (forwardInterval) clearInterval(forwardInterval);
                     forwardInterval = setInterval(() => {
                         if (manualForward) {
                             bot.setControlState('forward', true);
-                            // اگه جلوی پایش بلاک یا پورتال بود خودکار بپره تا رد بشه
                             if (bot.entity && bot.entity.isCollidedHorizontally) {
                                 bot.setControlState('jump', true);
                             } else {
@@ -146,7 +153,6 @@ jobs:
             });
 
             bot.on('forcedMove', () => {
-                // فرآیند TPA معمولی فقط در مپ اصلی
                 if (isInMainMap) {
                     if (waitingForTpaConfirm && targetPlayer) {
                         waitingForTpaConfirm = false;
@@ -161,17 +167,15 @@ jobs:
             bot.on('chat', async (username, message) => {
                 if (username === bot.username) return;
 
-                // 👑 دستور توقف ویژه از طرف اکانت اصلی شما
                 if (username === 'pvp_HS' && message === 'pvp_HSbot STOP') {
                     manualForward = false;
                     isInMainMap = true;
                     if (forwardInterval) clearInterval(forwardInterval);
-                    bot.clearControlStates(); // ریست کردن تمام کلیدها و ترمز کامل
+                    bot.clearControlStates();
                     console.log('🛑 ترمز دستی! دویدن مستقیم متوقف شد. بات مستقر در مپ اصلی و آماده دستورات.');
                     return;
                 }
 
-                // سایر دستورات فقط بعد از زدن استاپ و استقرار در مپ اصلی کار میکنند
                 if (!isInMainMap) return;
 
                 if (message === 'pvp_HS tpa') {
