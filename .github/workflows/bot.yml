@@ -18,6 +18,214 @@ jobs:
       with:
         node-version: '20'
 
+    - name: Create Project Files (package.json & bot.js)
+      run: |
+        # ۱. ساخت خودکار فایل package.json
+        cat << 'EOF' > package.json
+        {
+          "name": "6b6t-pvp-hsbot",
+          "version": "1.0.0",
+          "description": "Advanced Anarchy Bot for 6b6t",
+          "main": "bot.js",
+          "dependencies": {
+            "mineflayer": "^4.20.0",
+            "mineflayer-pathfinder": "^2.4.0",
+            "minecraft-data": "^3.73.0"
+          }
+        }
+        EOF
+
+        # ۲. ساخت خودکار فایل اصلی bot.js
+        cat << 'EOF' > bot.js
+        const mineflayer = require('mineflayer');
+        const { pathfinder, Movements, goals } = require('mineflayer-pathfinder');
+        const GoalBlock = goals.GoalBlock;
+        const https = require('https');
+
+        // ==========================================================================
+        // ⚙️ تنظیمات تلگرام (داداش توکن بات و چت آیدی خودت رو اینجا وارد کن)
+        // ==========================================================================
+        const TELEGRAM_BOT_TOKEN = '8940324884:AAGZLh7pJ1go9JmWdlMnaoD6j2wWRAnpADY'; // توکن بات تلگرامت
+        const TELEGRAM_CHAT_ID = '8517754313';     // چت آیدی خودت
+
+        function sendToTelegram(messageText) {
+            if (!TELEGRAM_BOT_TOKEN || TELEGRAM_BOT_TOKEN === 'YOUR_TELEGRAM_BOT_TOKEN') {
+                console.log('⚠ داداش توکن تلگرام رو تنظیم نکردی.');
+                return;
+            }
+            const data = JSON.stringify({
+                chat_id: TELEGRAM_CHAT_ID,
+                text: messageText,
+                parse_mode: 'HTML'
+            });
+            const options = {
+                hostname: 'api.telegram.org',
+                port: 443,
+                path: `/bot${TELEGRAM_BOT_TOKEN}/sendMessage`,
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Content-Length': data.length
+                }
+            };
+            const req = https.request(options, (res) => { res.on('data', () => {}); });
+            req.on('error', (err) => { console.error('❌ خطا در تلگرام:', err.message); });
+            req.write(data);
+            req.end();
+        }
+
+        let portalsEntered = 0;
+        let isInMainMap = false;
+        let waitingForTpaConfirm = false;
+        let targetPlayer = null;
+        let lastPos = null;
+
+        function createBot() {
+            console.log('\n=====================================================');
+            console.log('=== 🚀 در حال اتصال بات pvp_HSbot به سرور 6b6t ===');
+            console.log('=====================================================\n');
+            
+            const bot = mineflayer.createBot({
+                host: '6b6t.org',
+                username: 'pvp_HSbot',
+                version: '1.21.1',
+                skipValidation: true
+            });
+
+            bot.loadPlugin(pathfinder);
+
+            bot.on('spawn', () => {
+                console.log('✅ بات با موفقیت وارد سرور شد!');
+                setTimeout(() => {
+                    bot.chat('/login AZHAN8585@#@#ABOL1234');
+                    console.log('➡ دستور لاگین ارسال شد.');
+                }, 2000);
+
+                portalsEntered = 0;
+                isInMainMap = false;
+                waitingForTpaConfirm = false;
+                targetPlayer = null;
+
+                setTimeout(() => { findAndEnterPortal(bot); }, 5000);
+            });
+
+            async function findAndEnterPortal(bot) {
+                if (isInMainMap || portalsEntered >= 2) return;
+                console.log(`🔍 در حال جستجوی پورتال ندر... (مرحله ${portalsEntered + 1})`);
+                const portalBlock = bot.findBlock({
+                    matching: bot.registry.blocksByName['nether_portal'].id,
+                    maxDistance: 32
+                });
+                if (portalBlock) {
+                    console.log(`📍 پورتال در مختصات ${portalBlock.position} پیدا شد. حرکت...`);
+                    const mcData = require('minecraft-data')(bot.version);
+                    const movements = new Movements(bot, mcData);
+                    movements.canDig = false;
+                    bot.pathfinder.setMovements(movements);
+                    bot.pathfinder.setGoal(new GoalBlock(portalBlock.position.x, portalBlock.position.y, portalBlock.position.z));
+                } else {
+                    setTimeout(() => findAndEnterPortal(bot), 3000);
+                }
+            }
+
+            bot.on('move', () => {
+                if (isInMainMap) return;
+                if (!lastPos) { lastPos = bot.entity.position.clone(); return; }
+                if (bot.entity.position.distanceTo(lastPos) > 60) {
+                    portalsEntered++;
+                    console.log(`🌌 بات تلپورت شد! تعداد پورتال‌ها: ${portalsEntered}`);
+                    if (portalsEntered >= 2) {
+                        isInMainMap = true;
+                        console.log('=== 🎉 بات وارد مپ اصلی شد ===');
+                    } else {
+                        setTimeout(() => findAndEnterPortal(bot), 5000);
+                    }
+                }
+                lastPos = bot.entity.position.clone();
+            });
+
+            bot.on('chat', async (username, message) => {
+                if (username === bot.username) return;
+                if (message === 'pvp_HS tpa') {
+                    bot.chat(`/tpa ${username}`);
+                }
+                if (message === 'pvp_HS totem' || message === 'pvp_HSkit') {
+                    const chestBlock = bot.findBlock({
+                        matching: [bot.registry.blocksByName['chest'].id, bot.registry.blocksByName['trapped_chest'].id],
+                        maxDistance: 20
+                    });
+                    if (!chestBlock) {
+                        bot.chat(`/w ${username} داداش چستی پیدا نشد!`);
+                        return;
+                    }
+                    try {
+                        const chest = await bot.openChest(chestBlock);
+                        const shulkerItem = chest.containerItems().find(item => item.name.includes('shulker_box'));
+                        if (!shulkerItem) {
+                            chest.close();
+                            bot.chat(`/w ${username} داداش شالکری نبود!`);
+                            return;
+                        }
+                        await chest.withdraw(shulkerItem.type, null, 1);
+                        chest.close();
+                        targetPlayer = username;
+                        waitingForTpaConfirm = true;
+                        bot.chat(`/tpa ${username}`);
+                    } catch (err) {
+                        bot.chat(`/w ${username} باگ در چست!`);
+                    }
+                }
+            });
+
+            bot.on('message', (jsonMsg) => {
+                const msg = jsonMsg.toString();
+                if (msg.includes('has requested to teleport to you') || msg.includes('tpa')) {
+                    bot.chat('/tpaccept');
+                }
+            });
+
+            bot.on('forcedMove', () => {
+                if (waitingForTpaConfirm && targetPlayer) {
+                    waitingForTpaConfirm = false;
+                    setTimeout(() => {
+                        bot.chat('/kill');
+                        targetPlayer = null;
+                    }, 1500);
+                }
+            });
+
+            // ⚠️ اگر سرور پیام کیک رسمی فرستاد (مثلاً حاوی کد وریفای)
+            bot.on('kick', (reason) => {
+                let kickMessage = reason ? (typeof reason === 'object' ? JSON.stringify(reason) : reason.toString()) : 'نامشخص';
+                console.log('⚠️ KICKED:', kickMessage);
+                sendToTelegram(`🚨 <b>بات از 6b6t کیک شد!</b>\n\n🔑 <b>متن کیک/کد احتمالی:</b>\n<code>${kickMessage}</code>\n\n⏱️ ۴ دقیقه استراحت شروع شد...`);
+            });
+
+            // 🛑 اگر فایروال شبکه کلاً سوکت رو بست و نذاشت پیام بیاد
+            bot.on('end', (reason) => {
+                console.log(`🛑 ارتباط قطع شد (end). دلیل: ${reason}`);
+                
+                let alertText = `🚨 <b>ارتباط با سرور 6b6t قطع شد (end)</b>\n\nوضعیت قطع اتصال: <code>${reason}</code>\n\n`;
+                if (reason === 'socketClosed') {
+                    alertText += `❌ <b>داداش فایروال آنتی‌وی‌پی‌ان سرور (TCPShield)، آی‌پي گیت‌هاب رو در جا خفه کرد و نذاشت حتی پیام کیک بیاد!</b>\n\n⏱️ ۴ دقیقه صبر می‌کنیم؛ شاید آی‌پي بعدی گیت‌هاب بلاک نباشه.`;
+                } else {
+                    alertText += `⏱️ طبق دستور، ۴ دقیقه قفل می‌کنیم تا بتونی وریفای کنی...`;
+                }
+                
+                sendToTelegram(alertText);
+                setTimeout(() => createBot(), 240000);
+            });
+
+            bot.on('error', (err) => {
+                console.error('❌ خطای شبکه:', err ? err.message : 'نامشخص');
+                sendToTelegram(`❌ <b>ارور شبکه بات:</b>\n<code>${err ? err.message : 'Unknown'}</code>`);
+            });
+        }
+
+        process.on('uncaughtException', (err) => { console.error('🔥 کرش پروسه:', err.message); });
+        createBot();
+        EOF
+
     - name: Install Dependencies
       run: npm install
 
