@@ -61,6 +61,19 @@ jobs:
 
             bot.loadPlugin(pathfinder);
 
+            // شنود لایه شبکه کلاینت برای مهار پکت‌های مخفی دیسکانکت قبل از بسته شدن سوکت
+            bot.once('connect', () => {
+                console.log('🔌 سوکت اولیه شبکه باز شد. در حال ارسال پکت هندشیک...');
+                if (bot._client) {
+                    bot._client.on('disconnect', (packet) => {
+                        console.log('\n======================================================================');
+                        console.log('⚠️ پکت دیسکانکت خام از سرور دریافت شد:');
+                        console.log(JSON.stringify(packet, null, 2));
+                        console.log('======================================================================\n');
+                    });
+                }
+            });
+
             bot.on('spawn', () => {
                 console.log('✅ بات با موفقیت وارد سرور شد!');
                 setTimeout(() => {
@@ -161,12 +174,11 @@ jobs:
                 }
             });
 
-            // ⚠️ شکارچی اصلی پیام کیک سرور (کد وریفای متنی یا لینک سایت)
+            // ⚠️ شکارچی پیام کیک رسمی ماینکرفت
             bot.on('kick', (reason) => {
                 let kickMessage = 'تهی';
                 if (reason) {
                     if (typeof reason === 'object') {
-                        // کالبدشکافی کامل آبجکت چت ماینکرفت برای استخراج دقیق کد
                         kickMessage = reason.text || '';
                         if (reason.extra && Array.isArray(reason.extra)) {
                             kickMessage += ' ' + reason.extra.map(e => e.text || JSON.stringify(e)).join('');
@@ -188,6 +200,9 @@ jobs:
             bot.on('end', (reason) => {
                 console.log('\n======================================================================');
                 console.log(`🛑 ارتباط قطع شد (end). دلیل: ${reason}`);
+                if (reason === 'socketClosed') {
+                    console.log('💡 نکته: این ارور یعنی فایروال سرور اتصال رو در لایه شبکه بسته.');
+                }
                 console.log('⏱️ طبق دستور شما، ۴ دقیقه (۲۴۰۰۰۰ میلی ثانیه) قفل می‌کنیم تا بتونی وریفای کنی...');
                 console.log('======================================================================\n');
                 setTimeout(() => createBot(), 240000);
@@ -195,7 +210,7 @@ jobs:
 
             bot.on('error', (err) => {
                 console.log('\n======================================================================');
-                console.error('❌ خطای شبکه:', err ? err.message : 'نامشخص');
+                console.error('❌ خطای شبکه کلاینت:', err ? err.message : 'نامشخص');
                 console.log('======================================================================\n');
             });
         }
