@@ -164,10 +164,22 @@ function createBot() {
         }
     });
 
-    // ۵. سیستم آنتی دیسکانکت و اتصال مجدد خودکار (Auto Reconnect)
+    // دریافت متن کامل کیک شدن از سرور (برای وریفای شما)
+    bot.on('kick', (reason) => {
+        console.log('=============================================');
+        console.log('⚠️ بات از سرور کیک شد! متن کامل دلیل کیک در زیر آمده است:');
+        console.log('متن خام یا آبجکت کیک:', typeof reason === 'object' ? JSON.stringify(reason, null, 2) : reason);
+        if (reason && reason.toString) {
+            console.log('متن نهایی کیک (Readable):', reason.toString());
+        }
+        console.log('=============================================');
+    });
+
+    // ۵. سیستم آنتی دیسکانکت با تاخیر ۴ دقیقه‌ای (۲۴۰۰۰۰ میلی‌ثانیه)
     bot.on('end', (reason) => {
-        console.log(`بات دیسکانکت شد. دلیل: ${reason}. تلاش مجدد برای اتصال تا ۱۰ ثانیه دیگر...`);
-        setTimeout(() => createBot(), 10000);
+        console.log(`بات دیسکانکت شد. دلیل پایان کانکشن: ${reason}`);
+        console.log('⏱️ طبق دستور شما، ۴ دقیقه (۲۴۰۰۰۰ میلی ثانیه) صبر می‌کنیم تا بتونی وریفای کنی...');
+        setTimeout(() => createBot(), 240000);
     });
 
     bot.on('error', (err) => {
