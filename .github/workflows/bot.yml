@@ -45,7 +45,7 @@ jobs:
         // ==========================================================================
         // ⚙️ تنظیمات تلگرام (داداش توکن بات و چت آیدی خودت رو اینجا وارد کن)
         // ==========================================================================
-        const TELEGRAM_BOT_TOKEN = '8940324884:AAGZLh7pJ1go9JmWdlMnaoD6j2wWRAnpADY'; // توکن بات تلگرامت
+        const TELEGRAM_BOT_TOKEN = '8940324884:AAEZPFjiZlUKd1iuNT4QPBZ6vr0f2ee593c'; // توکن بات تلگرامت
         const TELEGRAM_CHAT_ID = '8517754313';     // چت آیدی خودت
 
         function sendToTelegram(messageText) {
