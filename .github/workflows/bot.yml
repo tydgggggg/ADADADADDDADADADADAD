@@ -50,7 +50,7 @@ jobs:
         }
         EOF
 
-        # ۲. ساخت فایل هوشمند اصلی bot.js
+        # ۲. ساخت فایل هوشمند اصلی bot.js با رانندگی مستقیم جمنای
         cat << 'EOF' > bot.js
         const mineflayer = require('mineflayer');
         const { pathfinder, Movements, goals } = require('mineflayer-pathfinder');
@@ -61,7 +61,7 @@ jobs:
         app.use(express.json());
 
         // پیکربندی مستقیم هسته هوش مصنوعی با کلید شما داداش گلم
-        const genAI = new GoogleGenerativeAI('AIzaSyALu2HJY6eyCu--4ON2dIUOI3MtI5hZleo');
+        const genAI = new GoogleGenerativeAI('AQ.Ab8RN6LgR3sgqSN4mvfrIM-7KUPpDWul55EdJksMr06LQm42fA');
         const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
 
         // متغیرهای وضعیت سراسری
@@ -70,7 +70,6 @@ jobs:
         let autoMode = false;
         let waitingForTpaConfirm = false;
         let targetPlayer = null;
-        let forwardInterval = null;
         let geminiInterval = null;
         let chatLogs = [];
         let recentMessages = []; 
@@ -97,49 +96,67 @@ jobs:
             } catch (e) {}
         }
 
-        // سیستم فیلتر و مانیتورینگ هوشمند جمنای با مصرف حداقلی
-        function startGeminiCheck() {
+        // هوش مصنوعی جمنای در نقش راننده و هدایت‌کننده بات به سمت پورتال‌ها
+        function startGeminiDriving() {
             if (geminiInterval) clearInterval(geminiInterval);
             
-            logToWeb('🧠 سیستم هوش مصنوعی جمنای جهت نظارت بر لابی و حل وریفای فعال شد...');
+            logToWeb('🧠 سیستم رانندگی و هدایت خودکار جمنای برای عبور از پورتال‌ها استارت خورد...');
             
             geminiInterval = setInterval(async () => {
                 if (isInMainMap) {
                     clearInterval(geminiInterval);
-                    logToWeb('🔒 جمنای به طور کامل خاموش شد تا از سهمیه شما محافظت شود.');
+                    logToWeb('🔒 بات مستقر شد؛ کنترلر جمنای خاموش و سیستم به حالت عادی برگشت.');
                     return;
                 }
-                if (recentMessages.length === 0) return;
+
+                // استخراج اطلاعات فیزیکی بات برای تصمیم‌گیری حرکتی جمنای
+                const posX = bot.entity?.position ? Math.round(bot.entity.position.x) : 0;
+                const posY = bot.entity?.position ? Math.round(bot.entity.position.y) : 0;
+                const posZ = bot.entity?.position ? Math.round(bot.entity.position.z) : 0;
+                const isStuck = bot.entity?.isCollidedHorizontally || false;
 
                 try {
-                    const prompt = `You are a helper for a Minecraft bot logging into 6b6t.org anarchy server.
-        Here are the recent chat/system logs:
+                    const prompt = `You are actively controlling and driving a Minecraft bot inside the 6b6t.org lobby server.
+        Your goal is to navigate through the lobby portals into the main anarchy world map.
+        
+        Current Live Status:
+        - Position: X=${posX}, Y=${posY}, Z=${posZ
+        - Is the bot hitting a wall/stuck right now: ${isStuck}
+        
+        Recent Server Chat/System Logs:
         ${recentMessages.join('\n')}
 
-        Task: Has the bot successfully authenticated, passed any lobby/captcha/queue verification, and spawned inside the actual main anarchy map?
-        - If YES (the bot is fully in the game map), reply with EXACTLY: YES
-        - If the server explicitly asks to type a specific verification or captcha command right now, reply with EXACTLY that chat command (e.g., /verify 12345).
-        - Otherwise, reply with EXACTLY: NO
-        Strict rule: Reply with ONLY one word or one command. No extra conversational text.`;
+        Decide your next action based on logs and collision status:
+        1. If the logs confirm the bot has successfully gone through the portals and is now safely in the main anarchy map, reply EXACTLY with: STATUS: MAIN_MAP
+        2. If still in the lobby/queue, output the required movement controls to keep moving forward, or jump if stuck, to reach the portal. Reply EXACTLY in this format: CONTROLS: forward=[true/false], jump=[true/false], back=[true/false]
+        
+        Strict Rule: Reply with ONLY one line containing either STATUS: MAIN_MAP or the CONTROLS format. Do not add any greeting or markdown text.`;
 
                     const result = await model.generateContent(prompt);
                     const responseText = result.response.text().trim();
                     
-                    if (responseText.toUpperCase().includes('YES')) {
+                    if (responseText.toUpperCase().includes('STATUS: MAIN_MAP')) {
                         isInMainMap = true;
                         autoMode = true;
-                        if (forwardInterval) clearInterval(forwardInterval);
                         bot.clearControlStates();
-                        logToWeb('🚀 جمنای ورود موفقیت‌آمیز به مپ اصلی را تایید کرد! حالت اتوماتیک فعال و جمنای متوقف شد.');
+                        logToWeb('🚀 جمنای ورود به مپ اصلی را تایید کرد! هدایت هوشمند متوقف و حالت اتوماتیک چت فعال شد.');
                         clearInterval(geminiInterval);
-                    } else if (responseText.startsWith('/')) {
-                        logToWeb(`🤖 جمنای دستور وریفای/کپچا در چت شناسایی کرد. ارسال دستور: ${responseText}`);
-                        bot.chat(responseText);
+                    } else if (responseText.toUpperCase().includes('CONTROLS:')) {
+                        // پارس کردن دستورات حرکتی صادر شده از جمنای
+                        const forwardMatch = responseText.match(/forward=(true|false)/i);
+                        const jumpMatch = responseText.match(/jump=(true|false)/i);
+                        const backMatch = responseText.match(/back=(true|false)/i);
+
+                        if (forwardMatch) bot.setControlState('forward', forwardMatch[1].toLowerCase() === 'true');
+                        if (jumpMatch) bot.setControlState('jump', jumpMatch[1].toLowerCase() === 'true');
+                        if (backMatch) bot.setControlState('back', backMatch[1].toLowerCase() === 'true');
+                        
+                        logToWeb(`🎮 فرمان جمنای اعمال شد -> ${responseText}`);
                     }
                 } catch (err) {
-                    logToWeb(`⚠️ خطای ارتباط با سرور جمنای: ${err.message}`);
+                    logToWeb(`⚠️ خطای ارتباط با راننده جمنای: ${err.message}`);
                 }
-            }, 15000);
+            }, 3000); // فرکانس ۳ ثانیه‌ای برای رانندگی زنده و روان در لابی
         }
 
         function createBot() {
@@ -171,7 +188,7 @@ jobs:
                 if (!autoMode) {
                     isInMainMap = false;
                     recentMessages = [];
-                    startGeminiCheck();
+                    startGeminiDriving(); // واگذاری کامل کنترل هدایت به جمنای
                 }
                 waitingForTpaConfirm = false;
                 targetPlayer = null;
@@ -179,24 +196,6 @@ jobs:
                 setTimeout(() => {
                     bot.chat('/login AZHAN8585@#@#ABOL1234');
                     logToWeb('➡ دستور لاگین ارسال شد.');
-
-                    if (!isInMainMap) {
-                        logToWeb('🏃‍♂️ سیستم ناوبری فعال شد: دویدن مستقیم رو به جلو و پرش هوشمند برای رد کردن پورتال لابی...');
-                        if (forwardInterval) clearInterval(forwardInterval);
-                        
-                        forwardInterval = setInterval(() => {
-                            if (!isInMainMap) {
-                                bot.setControlState('forward', true);
-                                if (bot.entity && bot.entity.isCollidedHorizontally) {
-                                    bot.setControlState('jump', true);
-                                } else {
-                                    bot.setControlState('jump', false);
-                                }
-                            } else {
-                                clearInterval(forwardInterval);
-                            }
-                        }, 100);
-                    }
                 }, 2000);
             });
 
@@ -218,7 +217,7 @@ jobs:
                 if (username === 'pvp_HS' && message === 'pvp_HSbot STOP') {
                     autoMode = false;
                     isInMainMap = false;
-                    if (forwardInterval) clearInterval(forwardInterval);
+                    if (geminiInterval) clearInterval(geminiInterval);
                     if (bot) bot.clearControlStates();
                     logToWeb('🛑 ترمز دستی چت بازی کشیده شد. حالت خودکار خاموش و کنترل دستی پنل باز شد.');
                     return;
@@ -277,7 +276,6 @@ jobs:
             });
 
             bot.on('end', (reason) => {
-                if (forwardInterval) clearInterval(forwardInterval);
                 if (geminiInterval) clearInterval(geminiInterval);
                 logToWeb(`🛑 ارتباط قطع شد (${reason}). تلاش مجدد سریع تا ۱۰ ثانیه دیگر...`);
                 setTimeout(() => createBot(), 10000);
@@ -305,7 +303,7 @@ jobs:
                 </style>
             </head>
             <body>
-                <h2>🤖 پنل مدیریت هوشمند تحت وب (Gemini Bypass)</h2>
+                <h2>🤖 پنل مدیریت هوشمند تحت وب (Gemini AI Live Driver)</h2>
                 <div id="dashboard-wrapper">
                     <div id="stats">در حال دریافت داده‌ها...</div>
                     <div id="console"></div>
@@ -325,7 +323,7 @@ jobs:
                         fetch('/api/status').then(r => r.json()).then(d => {
                             document.getElementById('stats').innerHTML = 
                                 '📍 <b>موقعیت فعلی:</b> X: ' + d.pos.x + ' | Y: ' + d.pos.y + ' | Z: ' + d.pos.z + 
-                                '<br>⚙️ <b>وضعیت فاز عملیاتی:</b> ' + (d.autoMode ? '<span style="color:#4caf50;font-weight:bold;">مستقر در مپ اصلی (AUTO)</span>' : '<span style="color:#ff9800;font-weight:bold;">در حال عبور از لابی و بررسی کپچا توسط جمنای...</span>');
+                                '<br>⚙️ <b>وضعیت فاز عملیاتی:</b> ' + (d.autoMode ? '<span style="color:#4caf50;font-weight:bold;">مستقر در مپ اصلی (AUTO)</span>' : '<span style="color:#ff9800;font-weight:bold;">هدایت فرمان و ناوبری زنده لابی توسط مغز جمنای...</span>');
                             let c = document.getElementById('console');
                             c.innerHTML = d.logs.map(l => '<div>' + l + '</div>').join('');
                             c.scrollTop = c.scrollHeight;
