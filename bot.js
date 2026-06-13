@@ -10,7 +10,9 @@ let targetPlayer = null;
 let lastPos = null;
 
 function createBot() {
-    console.log('=== در حال اتصال بات pvp_HSbot به سرور 6b6t ===');
+    console.log('\n=====================================================');
+    console.log('=== 🚀 در حال اتصال بات pvp_HSbot به سرور 6b6t ===');
+    console.log('=====================================================\n');
     
     const bot = mineflayer.createBot({
         host: '6b6t.org',
@@ -23,12 +25,12 @@ function createBot() {
     bot.loadPlugin(pathfinder);
 
     bot.on('spawn', () => {
-        console.log('بات وارد سرور شد!');
+        console.log('✅ بات با موفقیت وارد سرور شد و اسپاون شد!');
         
         // ۱. عملیات لاگین خودکار با پسورد شما
         setTimeout(() => {
             bot.chat('/login AZHAN8585@#@#ABOL1234');
-            console.log('دستور لاگین ارسال شد.');
+            console.log('➡ دستور لاگین ارسال شد.');
         }, 2000);
 
         // ریست کردن وضعیت لابی‌ها در صورت دیسکانکت و اتصال مجدد
@@ -47,7 +49,7 @@ function createBot() {
     async function findAndEnterPortal(bot) {
         if (isInMainMap || portalsEntered >= 2) return;
 
-        console.log(`در حال جستجوی پورتال ندر... (مرحله ${portalsEntered + 1})`);
+        console.log(`🔍 در حال جستجوی پورتال ندر... (مرحله ${portalsEntered + 1})`);
         
         const portalBlock = bot.findBlock({
             matching: bot.registry.blocksByName['nether_portal'].id,
@@ -55,7 +57,7 @@ function createBot() {
         });
 
         if (portalBlock) {
-            console.log(`پورتال در مختصات ${portalBlock.position} پیدا شد. حرکت به سمت آن...`);
+            console.log(`📍 پورتال در مختصات ${portalBlock.position} پیدا شد. حرکت به سمت آن...`);
             const mcData = require('minecraft-data')(bot.version);
             const movements = new Movements(bot, mcData);
             movements.canDig = false; // بلاک‌ها رو خراب نکنه
@@ -75,11 +77,11 @@ function createBot() {
 
         if (bot.entity.position.distanceTo(lastPos) > 60) {
             portalsEntered++;
-            console.log(`بات تلپورت شد! تعداد پورتال‌های رد شده: ${portalsEntered}`);
+            console.log(`🌌 بات تلپورت شد! تعداد پورتال‌های رد شده: ${portalsEntered}`);
             
             if (portalsEntered >= 2) {
                 isInMainMap = true;
-                console.log('=== بات با موفقیت وارد مپ اصلی 6b6t شد! سیستم خودکار پورتال خاموش شد ===');
+                console.log('=== 🎉 بات با موفقیت وارد مپ اصلی 6b6t شد! سیستم خودکار پورتال خاموش شد ===');
             } else {
                 // ورود به لابی دوم، ۵ ثانیه صبر و سپس ورود به پورتال دوم
                 setTimeout(() => findAndEnterPortal(bot), 5000);
@@ -94,13 +96,13 @@ function createBot() {
 
         // دستور درخواست تی‌پی از بات
         if (message === 'pvp_HS tpa') {
-            console.log(`درخواست TPA از طرف ${username}`);
+            console.log(`💬 درخواست TPA از طرف ${username}`);
             bot.chat(`/tpa ${username}`);
         }
 
         // دستور برداشتن توتم یا کیت از چست و انتحاری
         if (message === 'pvp_HS totem' || message === 'pvp_HSkit') {
-            console.log(`دستور کیت/توتم توسط ${username} دریافت شد. جستجوی چست...`);
+            console.log(`📦 دستور کیت/توتم توسط ${username} دریافت شد. جستجوی چست...`);
             
             // پیدا کردن نزدیک‌ترین چست یا چست ترپ شده در بیس شما
             const chestBlock = bot.findBlock({
@@ -145,7 +147,7 @@ function createBot() {
     bot.on('message', (jsonMsg) => {
         const msg = jsonMsg.toString();
         if (msg.includes('has requested to teleport to you') || msg.includes('tpa')) {
-            console.log('ریکوئست TPA ورودی دریافت شد. در حال قبول کردن...');
+            console.log('🤝 ریکوئست TPA ورودی دریافت شد. در حال قبول کردن...');
             bot.chat('/tpaccept');
         }
     });
@@ -154,37 +156,74 @@ function createBot() {
     bot.on('forcedMove', () => {
         if (waitingForTpaConfirm && targetPlayer) {
             waitingForTpaConfirm = false;
-            console.log(`بات به موقعیت ${targetPlayer} رسید. اجرای دستور خودکشی...`);
+            console.log(`💀 بات به موقعیت ${targetPlayer} رسید. اجرای دستور خودکشی...`);
             
             setTimeout(() => {
                 bot.chat('/kill');
-                console.log(`بات کشته شد و شالکر کیت دراپ شد. بازگشت به تخت بیس...`);
+                console.log(`☠️ بات کشته شد و شالکر کیت دراپ شد. بازگشت به تخت بیس...`);
                 targetPlayer = null;
             }, 1500); // ۱.۵ ثانیه صبر میکنه تا مپ لود شه و شالکر دقیقاً پیش تو بیفته
         }
     });
 
-    // دریافت متن کامل کیک شدن از سرور (برای وریفای شما)
+    // 🔥 هاب اصلی گزارش کیک شدن با جزئیات میکروسکوپی برای وریفای شما
     bot.on('kick', (reason) => {
-        console.log('=============================================');
-        console.log('⚠️ بات از سرور کیک شد! متن کامل دلیل کیک در زیر آمده است:');
-        console.log('متن خام یا آبجکت کیک:', typeof reason === 'object' ? JSON.stringify(reason, null, 2) : reason);
-        if (reason && reason.toString) {
-            console.log('متن نهایی کیک (Readable):', reason.toString());
+        console.log('\n======================================================================');
+        console.log('⚠️ ⚠️ ⚠️ ⚠️  ALERT: KICKED FROM SERVER  ⚠️ ⚠️ ⚠️ ⚠️');
+        console.log('داداش بات از سرور کیک شد! اطلاعات کامل علت کیک در زیر است:');
+        console.log('----------------------------------------------------------------------');
+        console.log('فرمت متنی (Reason):', reason ? reason.toString() : 'تهی');
+        console.log('نوع داده دلیل کیک:', typeof reason);
+        try {
+            console.log('فرمت خام ساختار داده (JSON):', JSON.stringify(reason, null, 2));
+        } catch (e) {
+            console.log('امکان تبدیل به JSON وجود نداشت:', e.message);
         }
-        console.log('=============================================');
+        if (reason && typeof reason === 'object') {
+            if (reason.text) console.log('💬 متن مستقیم آبجکت:', reason.text);
+            if (reason.extra) console.log('💬 بخش اضافی متن (Extra):', JSON.stringify(reason.extra));
+        }
+        console.log('======================================================================\n');
     });
 
-    // ۵. سیستم آنتی دیسکانکت با تاخیر ۴ دقیقه‌ای (۲۴۰۰۰۰ میلی‌ثانیه)
+    // ۵. سیستم آنتی دیسکانکت با تاخیر فیکس ۴ دقیقه‌ای (۲۴۰۰۰۰ میلی‌ثانیه)
     bot.on('end', (reason) => {
-        console.log(`بات دیسکانکت شد. دلیل پایان کانکشن: ${reason}`);
-        console.log('⏱️ طبق دستور شما، ۴ دقیقه (۲۴۰۰۰۰ میلی ثانیه) صبر می‌کنیم تا بتونی وریفای کنی...');
+        console.log('\n======================================================================');
+        console.log(`🛑 CONNECTION ENDED: ارتباط با لایه شبکه سرور قطع شد.`);
+        console.log(`علت پایان ارتباط: ${reason}`);
+        console.log('⏱️ طبق دستور شما، ۴ دقیقه (۲۴۰۰۰۰ میلی ثانیه) قفل می‌کنیم تا بتونی توی لاگ چک کنی و وریفای کنی...');
+        console.log('======================================================================\n');
         setTimeout(() => createBot(), 240000);
     });
 
+    // هیدلر خطاهای تحت شبکه
     bot.on('error', (err) => {
-        console.error('خطای تحت شبکه یا کلاینت:', err);
+        console.log('\n======================================================================');
+        console.error('❌ NET ERROR DETECTED: خطای تحت شبکه یا کلاینت ماینکرفت رخ داد:');
+        if (err) {
+            console.error('پیام خطا:', err.message);
+            console.error('محل وقوع خطا (Stack):', err.stack);
+        }
+        console.log('======================================================================\n');
     });
 }
 
+// ==========================================================================
+// 🛡️ هیدلرهای سرتاسری سیستم برای گرفتن کرش‌های ناگهانی Node.js و چاپ اجباری لاگ
+// ==========================================================================
+process.on('uncaughtException', (err) => {
+    console.log('\n======================================================================');
+    console.error('🔥 CRITICAL UNCAUGHT EXCEPTION: یک خطای غیرمنتظره کل سیستم را متوقف کرد!');
+    console.error(err);
+    console.log('======================================================================\n');
+});
+
+process.on('unhandledRejection', (reason, promise) => {
+    console.log('\n======================================================================');
+    console.error('🌊 CRITICAL UNHANDLED REJECTION: یک عملیات پس‌زمینه (Promise) با خطا مواجه شد!');
+    console.error(reason);
+    console.log('======================================================================\n');
+});
+
+// استارت اولیه بات
 createBot();
