@@ -33,7 +33,7 @@ jobs:
 
     - name: Create Project Files (package.json & bot.js)
       run: |
-        # ۱. ساخت فایل package.json (حذف کامل ابزارهای سنگین گرافیکی و اضافه شدن پکیج رسمی جمنای)
+        # ۱. ساخت فایل package.json
         cat << 'EOF' > package.json
         {
           "name": "6b6t-pvp-hsbot",
@@ -50,7 +50,7 @@ jobs:
         }
         EOF
 
-        # ۲. ساخت فایل هوشمند اصلی bot.js مجهز به بهینه‌ساز مصرف توکن جمنای
+        # ۲. ساخت فایل هوشمند اصلی bot.js
         cat << 'EOF' > bot.js
         const mineflayer = require('mineflayer');
         const { pathfinder, Movements, goals } = require('mineflayer-pathfinder');
@@ -104,7 +104,6 @@ jobs:
             logToWeb('🧠 سیستم هوش مصنوعی جمنای جهت نظارت بر لابی و حل وریفای فعال شد...');
             
             geminiInterval = setInterval(async () => {
-                // ترمز اضطراری: اگر در مپ بودیم یا به هر دلیلی تایید شد، ثانیه‌ای ریکوئست نزن
                 if (isInMainMap) {
                     clearInterval(geminiInterval);
                     logToWeb('🔒 جمنای به طور کامل خاموش شد تا از سهمیه شما محافظت شود.');
@@ -114,14 +113,14 @@ jobs:
 
                 try {
                     const prompt = `You are a helper for a Minecraft bot logging into 6b6t.org anarchy server.
-Here are the recent chat/system logs:
-${recentMessages.join('\n')}
+        Here are the recent chat/system logs:
+        ${recentMessages.join('\n')}
 
-Task: Has the bot successfully authenticated, passed any lobby/captcha/queue verification, and spawned inside the actual main anarchy map?
-- If YES (the bot is fully in the game map), reply with EXACTLY: YES
-- If the server explicitly asks to type a specific verification or captcha command right now, reply with EXACTLY that chat command (e.g., /verify 12345).
-- Otherwise, reply with EXACTLY: NO
-Strict rule: Reply with ONLY one word or one command. No extra conversational text.`;
+        Task: Has the bot successfully authenticated, passed any lobby/captcha/queue verification, and spawned inside the actual main anarchy map?
+        - If YES (the bot is fully in the game map), reply with EXACTLY: YES
+        - If the server explicitly asks to type a specific verification or captcha command right now, reply with EXACTLY that chat command (e.g., /verify 12345).
+        - Otherwise, reply with EXACTLY: NO
+        Strict rule: Reply with ONLY one word or one command. No extra conversational text.`;
 
                     const result = await model.generateContent(prompt);
                     const responseText = result.response.text().trim();
@@ -140,7 +139,7 @@ Strict rule: Reply with ONLY one word or one command. No extra conversational te
                 } catch (err) {
                     logToWeb(`⚠️ خطای ارتباط با سرور جمنای: ${err.message}`);
                 }
-            }, 15000); // زمان‌بندی ۱۵ ثانیه‌ای برای جلوگیری از لیمیت شدن API
+            }, 15000);
         }
 
         function createBot() {
@@ -172,7 +171,7 @@ Strict rule: Reply with ONLY one word or one command. No extra conversational te
                 if (!autoMode) {
                     isInMainMap = false;
                     recentMessages = [];
-                    startGeminiCheck(); // روشن کردن جمنای فقط برای فاز ورود
+                    startGeminiCheck();
                 }
                 waitingForTpaConfirm = false;
                 targetPlayer = null;
@@ -263,7 +262,6 @@ Strict rule: Reply with ONLY one word or one command. No extra conversational te
                 const msg = jsonMsg.toString();
                 logToWeb(msg);
                 
-                // جمع‌آوری پیام‌ها در بافر جمنای، به شرطی که هنوز لابی را رد نکرده باشیم
                 if (!isInMainMap) {
                     recentMessages.push(msg);
                     if (recentMessages.length > 15) recentMessages.shift();
@@ -290,9 +288,6 @@ Strict rule: Reply with ONLY one word or one command. No extra conversational te
             });
         }
 
-        // =====================================================================
-        // 🌐 وب سرور سبک مانیتورینگ متنی و دکمه‌های کنترل از راه دور
-        // =====================================================================
         app.get('/', (req, res) => {
             res.send(`
             <!DOCTYPE html>
@@ -311,11 +306,9 @@ Strict rule: Reply with ONLY one word or one command. No extra conversational te
             </head>
             <body>
                 <h2>🤖 پنل مدیریت هوشمند تحت وب (Gemini Bypass)</h2>
-                
                 <div id="dashboard-wrapper">
                     <div id="stats">در حال دریافت داده‌ها...</div>
                     <div id="console"></div>
-                    
                     <div class="pad">
                         <div></div><button onmousedown="move('forward',true)" onmouseup="move('forward',false)">W</button><div></div>
                         <button onmousedown="move('left',true)" onmouseup="move('left',false)">A</button>
@@ -324,18 +317,15 @@ Strict rule: Reply with ONLY one word or one command. No extra conversational te
                         <div></div><button onmousedown="move('jump',true)" onmouseup="move('jump',false)">✈️</button><div></div>
                     </div>
                 </div>
-
                 <script>
                     function move(action, state) {
                         fetch('/api/move', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ action, state }) });
                     }
-
                     setInterval(() => {
                         fetch('/api/status').then(r => r.json()).then(d => {
                             document.getElementById('stats').innerHTML = 
                                 '📍 <b>موقعیت فعلی:</b> X: ' + d.pos.x + ' | Y: ' + d.pos.y + ' | Z: ' + d.pos.z + 
                                 '<br>⚙️ <b>وضعیت فاز عملیاتی:</b> ' + (d.autoMode ? '<span style="color:#4caf50;font-weight:bold;">مستقر در مپ اصلی (AUTO)</span>' : '<span style="color:#ff9800;font-weight:bold;">در حال عبور از لابی و بررسی کپچا توسط جمنای...</span>');
-                            
                             let c = document.getElementById('console');
                             c.innerHTML = d.logs.map(l => '<div>' + l + '</div>').join('');
                             c.scrollTop = c.scrollHeight;
