@@ -44,7 +44,8 @@ jobs:
         websockify --web /usr/share/novnc 6080 127.0.0.1:5900 &
         sleep 4
         
-        chromium-browser --no-sandbox --disable-setuid-sandbox &
+        # تنظیم کرومیوم برای باز کردن مستقیم داشبورد کنترل بات روی پورت 3000
+        chromium-browser --no-sandbox --disable-setuid-sandbox http://127.0.0.1:3000 &
         sleep 3
         
         cloudflared tunnel --url http://127.0.0.1:6080 > cloudflare.log 2>&1 &
@@ -54,31 +55,45 @@ jobs:
 
     - name: Create Project Files (package.json & bot.js)
       run: |
-        # ۱. ساخت خودکار فایل package.json
+        # ۱. ساخت خودکار فایل package.json (اضافه شدن express برای وب‌سرور)
         cat << 'EOF' > package.json
         {
           "name": "6b6t-pvp-hsbot",
           "version": "1.0.0",
-          "description": "Advanced Anarchy Bot for 6b6t",
+          "description": "Advanced Anarchy Bot with Web Controller",
           "main": "bot.js",
           "dependencies": {
             "mineflayer": "^4.20.0",
             "mineflayer-pathfinder": "^2.4.0",
-            "minecraft-data": "^3.73.0"
+            "minecraft-data": "^3.73.0",
+            "express": "^4.19.2"
           }
         }
         EOF
 
-        # ۲. ساخت خودکار فایل اصلی bot.js (به همراه بازگشت پکت لیسنر خام)
+        # ۲. ساخت خودکار فایل اصلی bot.js مجهز به داشبورد وب زنده
         cat << 'EOF' > bot.js
         const mineflayer = require('mineflayer');
         const { pathfinder, Movements, goals } = require('mineflayer-pathfinder');
+        const express = require('express');
+        const app = express();
 
+        app.use(express.json());
+
+        // متغیرهای وضعیت سراسری
+        let bot = null;
         let isInMainMap = false;
-        let manualForward = true;
+        let autoMode = false;
         let waitingForTpaConfirm = false;
         let targetPlayer = null;
-        let forwardInterval = null;
+        let chatLogs = [];
+
+        function logToWeb(msg) {
+            const timestamp = new Date().toLocaleTimeString();
+            chatLogs.push(`[${timestamp}] ${msg}`);
+            if (chatLogs.length > 150) chatLogs.shift();
+            console.log(msg);
+        }
 
         function printTunnelLink() {
             try {
@@ -96,12 +111,10 @@ jobs:
         }
 
         function createBot() {
-            console.log('\n=====================================================');
-            console.log('=== 🚀 در حال اتصال بات pvp_HSbot به سرور 6b6t ===');
+            logToWeb('🚀 در حال ایجاد اتصال کلاینت ماینکرفت به 6b6t.org...');
             printTunnelLink();
-            console.log('=====================================================\n');
             
-            const bot = mineflayer.createBot({
+            bot = mineflayer.createBot({
                 host: '6b6t.org',
                 username: 'pvp_HSbot',
                 version: '1.21.1',
@@ -110,50 +123,26 @@ jobs:
 
             bot.loadPlugin(pathfinder);
 
-            // 👑 بازگشت پکت لیسنر خام شبکه برای دریافت کدهای وریفای مخفی
             bot.once('connect', () => {
-                console.log('🔌 سوکت اولیه شبکه باز شد. در حال ارسال پکت هندشیک...');
+                logToWeb('🔌 سوکت اولیه شبکه باز شد. در حال ارسال پکت هندشیک...');
                 if (bot._client) {
                     bot._client.on('disconnect', (packet) => {
-                        console.log('\n======================================================================');
-                        console.log('⚠️ پکت دیسکانکت خام از سرور دریافت شد (کد وریفای احتمالی در زیر است):');
-                        console.log(JSON.stringify(packet, null, 2));
-                        console.log('======================================================================\n');
+                        logToWeb(`⚠️ [پکت دیسکانکت خام] دریافت شد:\n${JSON.stringify(packet, null, 2)}`);
                     });
                 }
             });
 
             bot.on('spawn', () => {
-                console.log('✅ بات با موفقیت وارد سرور شد!');
-                
-                setTimeout(() => {
-                    bot.chat('/login AZHAN8585@#@#ABOL1234');
-                    console.log('➡ دستور لاگین ارسال شد. شروع دویدن مستقیم به جلو و پرش خودکار...');
-                    
-                    manualForward = true;
+                logToWeb('✅ بات وارد سرور شد. پنل وب آماده کنترل دستی و ورود رمز است.');
+                if (!autoMode) {
                     isInMainMap = false;
-                    
-                    if (forwardInterval) clearInterval(forwardInterval);
-                    forwardInterval = setInterval(() => {
-                        if (manualForward) {
-                            bot.setControlState('forward', true);
-                            if (bot.entity && bot.entity.isCollidedHorizontally) {
-                                bot.setControlState('jump', true);
-                            } else {
-                                bot.setControlState('jump', false);
-                            }
-                        } else {
-                            clearInterval(forwardInterval);
-                        }
-                    }, 100);
-                }, 2000);
-
+                }
                 waitingForTpaConfirm = false;
                 targetPlayer = null;
             });
 
             bot.on('forcedMove', () => {
-                if (isInMainMap) {
+                if (autoMode && isInMainMap) {
                     if (waitingForTpaConfirm && targetPlayer) {
                         waitingForTpaConfirm = false;
                         setTimeout(() => {
@@ -167,16 +156,19 @@ jobs:
             bot.on('chat', async (username, message) => {
                 if (username === bot.username) return;
 
-                if (username === 'pvp_HS' && message === 'pvp_HSbot STOP') {
-                    manualForward = false;
-                    isInMainMap = true;
-                    if (forwardInterval) clearInterval(forwardInterval);
-                    bot.clearControlStates();
-                    console.log('🛑 ترمز دستی! دویدن مستقیم متوقف شد. بات مستقر در مپ اصلی و آماده دستورات.');
-                    return;
+                // 👑 مدیریت سوییچ حالت‌ها از طریق چت بازی توسط اکانت اصلی تو
+                if (username === 'pvp_HS') {
+                    if (message === 'pvp_HSbot STOP') {
+                        autoMode = false;
+                        isInMainMap = false;
+                        if (bot) bot.clearControlStates();
+                        logToWeb('🛑 ترمز چت بازی فعال شد! حالت اتوماتیک خاموش و کنترل به داشبورد وب بازگشت.');
+                        return;
+                    }
                 }
 
-                if (!isInMainMap) return;
+                // سایر دستورات خودکار فقط در صورت فعال بودن AUTO MODE کار میکنند
+                if (!autoMode || !isInMainMap) return;
 
                 if (message === 'pvp_HS tpa') {
                     bot.chat(`/tpa ${username}`);
@@ -211,49 +203,162 @@ jobs:
             });
 
             bot.on('message', (jsonMsg) => {
+                logToWeb(jsonMsg.toString());
                 const msg = jsonMsg.toString();
-                if (msg.includes('has requested to teleport to you') || msg.includes('tpa')) {
+                if (autoMode && (msg.includes('has requested to teleport to you') || msg.includes('tpa'))) {
                     bot.chat('/tpaccept');
                 }
             });
 
             bot.on('kick', (reason) => {
-                let kickMessage = 'تهی';
-                if (reason) {
-                    if (typeof reason === 'object') {
-                        kickMessage = reason.text || '';
-                        if (reason.extra && Array.isArray(reason.extra)) {
-                            kickMessage += ' ' + reason.extra.map(e => e.text || JSON.stringify(e)).join('');
-                        }
-                        if (!kickMessage) kickMessage = JSON.stringify(reason, null, 2);
-                    } else {
-                        kickMessage = reason.toString();
-                    }
-                }
-                console.log('\n======================================================================');
-                console.log('⚠️ ⚠️ ⚠️  ALERT: KICKED FROM SERVER  ⚠️ ⚠️ ⚠️');
-                console.log('داداش سرور بات رو کیک کرد. متن کامل پیام کیک:');
-                console.log('----------------------------------------------------------------------');
-                console.log(kickMessage);
-                console.log('======================================================================\n');
+                logToWeb(`❌ بات کیک شد! علت: ${JSON.stringify(reason)}`);
             });
 
             bot.on('end', (reason) => {
-                if (forwardInterval) clearInterval(forwardInterval);
-                console.log('\n======================================================================');
-                console.log(`🛑 ارتباط قطع شد (end). دلیل: ${reason}`);
-                printTunnelLink();
-                console.log('⏱️ طبق دستور شما، ۴ دقیقه (۲۴۰۰۰۰ میلی ثانیه) قفل می‌کنیم تا بتونی وریفای کنی...');
-                console.log('======================================================================\n');
+                logToWeb(`🛑 ارتباط به طور کامل پایان یافت (${reason}). بازنشانی تا ۴ دقیقه دیگر...`);
                 setTimeout(() => createBot(), 240000);
             });
 
             bot.on('error', (err) => {
-                console.log('\n======================================================================');
-                console.error('❌ خطای شبکه کلاینت:', err ? err.message : 'نامشخص');
-                console.log('======================================================================\n');
+                logToWeb(`❌ خطای شبکه کلاینت: ${err ? err.message : 'نامشخص'}`);
             });
         }
+
+        // =====================================================================
+        // 🌐 بخش بک‌اند وب‌سرور پنل گرافیکی داشبورد
+        // =====================================================================
+        app.get('/', (req, res) => {
+            res.send(`
+            <!DOCTYPE html>
+            <html dir="rtl">
+            <head>
+                <meta charset="UTF-8">
+                <meta name="viewport" content="width=device-width, initial-scale=1.0">
+                <title>داشبورد مدیریتی pvp_HSbot</title>
+                <style>
+                    body { background: #121212; color: #e0e0e0; font-family: Tahoma, Arial; margin: 15px; text-align: center; }
+                    h2 { color: #4caf50; margin-bottom: 5px; }
+                    #stats { background: #1e1e1e; padding: 10px; border-radius: 8px; margin-bottom: 10px; font-size: 13px; border: 1px solid #333; text-align: right; }
+                    #console { background: #000; color: #00ff00; border: 1px solid #444; height: 260px; overflow-y: scroll; padding: 10px; font-family: monospace; text-align: left; border-radius: 6px; font-size: 12px; margin-bottom: 10px; }
+                    .input-area { display: flex; gap: 8px; margin-bottom: 15px; }
+                    input[type="text"] { flex: 1; padding: 10px; background: #222; border: 1px solid #444; color: #fff; border-radius: 5px; font-family: monospace; }
+                    .btn { background: #333; color: white; border: 1px solid #555; padding: 10px 20px; border-radius: 5px; cursor: pointer; font-weight: bold; }
+                    .btn:active { background: #555; }
+                    .pad { display: grid; grid-template-columns: repeat(3, 55px); gap: 8px; justify-content: center; margin: 10px auto; }
+                    .pad button { background: #2e7d32; color: white; border: none; padding: 15px; font-size: 16px; font-weight: bold; border-radius: 6px; cursor: pointer; user-select: none; }
+                    .pad button:active { background: #1b5e20; }
+                    #btn-auto { background: #c62828; color: white; width: 100%; max-width: 300px; padding: 14px; font-size: 16px; font-weight: bold; border: none; border-radius: 8px; cursor: pointer; margin-top: 15px; box-shadow: 0 4px 6px rgba(0,0,0,0.3); }
+                    #btn-auto.active { background: #2e7d32; cursor: not-allowed; }
+                </style>
+            </head>
+            <body>
+                <h2>🎮 پنل کنترل زنده بات</h2>
+                <div id="stats">در حال بارگذاری اطلاعات سرور...</div>
+                <div id="console"></div>
+                
+                <div class="input-area">
+                    <input type="text" id="cmd" placeholder="ارسال چت یا کامند... (مثال: /login رمز)">
+                    <button class="btn" onclick="sendCmd()">ارسال</button>
+                </div>
+
+                <div style="font-size: 13px; color: #aaa;">🕹️ جهت نگاه رو از noVNC بچرخون و از دکمه‌ها یا کلیدهای WASD/Space کیبورد استفاده کن:</div>
+                <div class="pad">
+                    <div></div><button onmousedown="move('forward',true)" onmouseup="move('forward',false)" ontouchstart="move('forward',true)" ontouchend="move('forward',false)">W</button><div></div>
+                    <button onmousedown="move('left',true)" onmouseup="move('left',false)" ontouchstart="move('left',true)" ontouchend="move('left',false)">A</button>
+                    <button onmousedown="move('back',true)" onmouseup="move('back',false)" ontouchstart="move('back',true)" ontouchend="move('back',false)">S</button>
+                    <button onmousedown="move('right',true)" onmouseup="move('right',false)" ontouchstart="move('right',true)" ontouchend="move('right',false)">D</button>
+                    <div></div><button onmousedown="move('jump',true)" onmouseup="move('jump',false)" ontouchstart="move('jump',true)" ontouchend="move('jump',false)">✈️</button><div></div>
+                </div>
+
+                <button id="btn-auto" onclick="startAuto()">🚀 فعال‌سازی حالت خودکار (AUTO MODE)</button>
+
+                <script>
+                    const keyMap = { 'w': 'forward', 's': 'back', 'a': 'left', 'd': 'right', ' ': 'jump' };
+                    let activeKeys = {};
+
+                    window.addEventListener('keydown', (e) => {
+                        let k = e.key.toLowerCase();
+                        if (keyMap[k] && !activeKeys[k] && document.activeElement.tagName !== 'INPUT') {
+                            activeKeys[k] = true; move(keyMap[k], true);
+                        }
+                    });
+                    window.addEventListener('keyup', (e) => {
+                        let k = e.key.toLowerCase();
+                        if (keyMap[k] && document.activeElement.tagName !== 'INPUT') {
+                            activeKeys[k] = false; move(keyMap[k], false);
+                        }
+                    });
+
+                    function move(action, state) {
+                        fetch('/api/move', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ action, state }) });
+                    }
+                    function sendCmd() {
+                        let el = document.getElementById('cmd'); if(!el.value) return;
+                        fetch('/api/cmd', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ cmd: el.value }) });
+                        el.value = '';
+                    }
+                    function startAuto() {
+                        if (confirm('داش گلم مطمئنی؟ با فعال شدن اتوماتیک، کلیدهای وب قفل شده و بات منتظر دیسکورد یا دستور چت pvp_HS میمونه.')) {
+                            fetch('/api/auto', { method: 'POST' }).then(() => {
+                                let b = document.getElementById('btn-auto'); b.innerText = 'حالت خودکار فعال است ✅'; b.className = 'active'; b.disabled = true;
+                            });
+                        }
+                    }
+
+                    setInterval(() => {
+                        fetch('/api/status').then(r => r.json()).then(d => {
+                            document.getElementById('stats').innerHTML = '📍 <b>موقعیت بات:</b> X: ' + d.pos.x + ' | Y: ' + d.pos.y + ' | Z: ' + d.pos.z + ' <br>⚙️ <b>وضعیت سیستم:</b> ' + (d.autoMode ? '<span style="color:#4caf50">اتوماتیک (AUTO)</span>' : '<span style="color:#ff9800">کنترل دستی وب</span>');
+                            let c = document.getElementById('console'); c.innerHTML = d.logs.map(l => '<div>' + l + '</div>').join('');
+                            c.scrollTop = c.scrollHeight;
+                            if (d.autoMode) {
+                                let b = document.getElementById('btn-auto'); b.innerText = 'حالت خودکار فعال است ✅'; b.className = 'active'; b.disabled = true;
+                            } else {
+                                let b = document.getElementById('btn-auto'); b.innerText = '🚀 فعال‌سازی حالت خودکار (AUTO MODE)'; b.className = ''; b.disabled = false;
+                            }
+                        });
+                    }, 800);
+                </script>
+            </body>
+            </html>
+            `);
+        });
+
+        app.get('/api/status', (req, res) => {
+            let pos = { x: 0, y: 0, z: 0 };
+            if (bot && bot.entity && bot.entity.position) {
+                pos = { x: Math.round(bot.entity.position.x), y: Math.round(bot.entity.position.y), z: Math.round(bot.entity.position.z) };
+            }
+            res.json({ pos, autoMode, logs: chatLogs });
+        });
+
+        app.post('/api/cmd', (req, res) => {
+            const { cmd } = req.body;
+            if (bot && cmd) {
+                bot.chat(cmd);
+                logToWeb(`[Web Control] Sending Command: ${cmd}`);
+            }
+            res.sendStatus(200);
+        });
+
+        app.post('/api/move', (req, res) => {
+            const { action, state } = req.body;
+            if (bot && !autoMode) {
+                bot.setControlState(action, state);
+            }
+            res.sendStatus(200);
+        });
+
+        app.post('/api/auto', (req, res) => {
+            autoMode = true;
+            isInMainMap = true;
+            if (bot) bot.clearControlStates();
+            logToWeb('⚡ حالت AUTO MODE از داشبورد فعال شد! کلیدهای حرکتی وب غیرفعال شدند.');
+            res.sendStatus(200);
+        });
+
+        app.listen(3000, () => {
+            console.log('🌐 داشبورد کنترل وب روی پورت 3000 با موفقیت مستقر شد.');
+        });
 
         process.on('uncaughtException', (err) => { console.error('🔥 کرش ناگهانی پروسه:', err.message); });
         createBot();
