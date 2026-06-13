@@ -54,7 +54,7 @@ jobs:
 
     - name: Create Project Files (package.json & bot.js)
       run: |
-        # ۱. ساخت خودکار فایل package.json (اضافه شدن ماژول رندرر دید بات)
+        # ۱. ساخت خودکار فایل package.json (اصلاح نسخه رندرر به آخرین ورژن پایدار)
         cat << 'EOF' > package.json
         {
           "name": "6b6t-pvp-hsbot",
@@ -66,7 +66,7 @@ jobs:
             "mineflayer-pathfinder": "^2.4.0",
             "minecraft-data": "^3.73.0",
             "express": "^4.19.2",
-            "prismarine-viewer": "^2.7.0"
+            "prismarine-viewer": "latest"
           }
         }
         EOF
@@ -278,7 +278,6 @@ jobs:
 
             bot.on('end', (reason) => {
                 if (forwardInterval) clearInterval(forwardInterval);
-                // ⏱️ کاهش تایمر بازنشانی کانکت به ۱۰ ثانیه طبق دستور تو داداش گلم
                 logToWeb(`🛑 ارتباط قطع شد (${reason}). تلاش مجدد سریع تا ۱۰ ثانیه دیگر...`);
                 setTimeout(() => createBot(), 10000);
             });
@@ -333,87 +332,4 @@ jobs:
 
                 <script>
                     function move(action, state) {
-                        fetch('/api/move', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ action, state }) });
-                    }
-
-                    // 👑 منطق سوییچ هوشمند بین پنل متنی و دید سه‌بعدی داخل آدرس
-                    function toggleView(mode) {
-                        const wrapper = document.getElementById('dashboard-wrapper');
-                        const frame = document.getElementById('viewer-frame');
-                        const btnView = document.getElementById('btn-view-bot');
-                        const btnBack = document.getElementById('btn-back');
-                        
-                        if (mode === 'bot') {
-                            wrapper.style.display = 'none';
-                            btnView.style.display = 'none';
-                            frame.src = 'http://127.0.0.1:3007'; // لود زنده موتور گرافیکی بازی
-                            frame.style.display = 'block';
-                            btnBack.style.display = 'inline-block';
-                        } else {
-                            frame.src = 'about:blank';
-                            frame.style.display = 'none';
-                            btnBack.style.display = 'none';
-                            wrapper.style.display = 'block';
-                            btnView.style.display = 'inline-block';
-                        }
-                    }
-
-                    setInterval(() => {
-                        if (document.getElementById('dashboard-wrapper').style.display !== 'none') {
-                            fetch('/api/status').then(r => r.json()).then(d => {
-                                document.getElementById('stats').innerHTML = 
-                                    '📍 <b>موقعیت فعلی:</b> X: ' + d.pos.x + ' | Y: ' + d.pos.y + ' | Z: ' + d.pos.z + 
-                                    '<br>📊 <b>تعداد پلیرهای فعال در چت:</b> ' + d.chatterCount + ' از 4' +
-                                    '<br>⚙️ <b>وضعیت فاز عملیاتی:</b> ' + (d.autoMode ? '<span style="color:#4caf50;font-weight:bold;">مستقر در مپ اصلی (AUTO)</span>' : '<span style="color:#ff9800;font-weight:bold;">در حال عبور هوشمند از لابی...</span>');
-                                
-                                let c = document.getElementById('console');
-                                c.innerHTML = d.logs.map(l => '<div>' + l + '</div>').join('');
-                                c.scrollTop = c.scrollHeight;
-                            });
-                        }
-                    }, 1000);
-                </script>
-            </body>
-            </html>
-            `);
-        });
-
-        app.get('/api/status', (req, res) => {
-            let pos = { x: 0, y: 0, z: 0 };
-            if (bot && bot.entity && bot.entity.position) {
-                pos = { x: Math.round(bot.entity.position.x), y: Math.round(bot.entity.position.y), z: Math.round(bot.entity.position.z) };
-            }
-            res.json({ pos, autoMode, logs: chatLogs, chatterCount: uniqueChatters.size });
-        });
-
-        app.post('/api/move', (req, res) => {
-            const { action, state } = req.body;
-            if (bot && !autoMode) {
-                bot.setControlState(action, state);
-            }
-            res.sendStatus(200);
-        });
-
-        app.listen(3000, () => {
-            console.log('🌐 وب سرور مانیتورینگ روی پورت 3000 فعال شد.');
-        });
-
-        process.on('uncaughtException', (err) => { console.error('🔥 کرش پروسه:', err.message); });
-        createBot();
-        EOF
-
-    - name: Install Dependencies
-      run: npm install
-
-    - name: Run Bot in Infinite Loop
-      run: |
-        echo "=== در حال اجرای بات با قابلیت خود-ترمیمی زنده ==="
-        while true; do
-          echo "----------------------------------------------------------------------"
-          grep -o 'https://[^ ]*trycloudflare.com' /tmp/cloudflare.log || echo "لینک موقت یافت نشد"
-          echo "----------------------------------------------------------------------"
-          node bot.js
-          # ⏱️ کاهش تایمر کرش حلقه نگهبان گیت‌هاب به ۱۰ ثانیه
-          echo "بات متوقف شد یا کرش کرد. طبق دستور، ۱۰ ثانیه تا راه اندازی مجدد صبر میکنیم..."
-          sleep 10
-        done
+                        fetch('/api/move', { method: 'POST', headers:
