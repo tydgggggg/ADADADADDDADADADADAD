@@ -1,197 +1,387 @@
-name: Ultimate 6b6t Minecraft Bot
+name: Run 6b6t Anarchy Bot 24/7
 
 on:
-  workflow_dispatch: # اجرای دستی پروژه از پنل گیت‌هاب
+  push:
+    branches: [ "main" ]
+  workflow_dispatch:
 
 jobs:
   run-bot:
     runs-on: ubuntu-latest
 
     steps:
-    - name: Checkout repository
+    - name: Checkout Repository
       uses: actions/checkout@v4
 
-    - name: Setup Node.js
+    - name: Set up Node.js
       uses: actions/setup-node@v4
       with:
-        node-version: 20 # آپدیت به نسخه ۲۰ برای پایداری بیشتر
+        node-version: '20'
 
-    - name: Install System Dependencies for GUI & noVNC
+    - name: Install Cloudflared
       run: |
-        sudo apt-get update
-        sudo apt-get install -y xvfb fluxbox x11vnc websockify novnc chromium-browser curl
+        echo "⏳ در حال نصب کلودفلرد برای تانل مستقیم وب پنل..."
+        curl -L -o cloudflared.deb https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64.deb
+        sudo dpkg -i cloudflared.deb
 
-    - name: Install Cloudflared (Cloudflare Tunnel)
+    - name: Launch Cloudflare Tunnel
       run: |
-        curl -L https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64 -o cloudflared
-        chmod +x cloudflared
-        sudo mv cloudflared /usr/local/bin/
+        echo "🚀 در حال راه‌اندازی تانل مستقیم برای وب سرور مدیریت وب..."
+        cloudflared tunnel --url http://127.0.0.1:3000 > cloudflare.log 2>&1 &
+        sleep 5
+        cp cloudflare.log /tmp/cloudflare.log
 
-    - name: Install Node.js Packages
+    - name: Create Project Files (package.json & bot.js)
       run: |
-        npm install mineflayer mineflayer-pathfinder
+        # ۱. ساخت فایل package.json (حذف کامل ابزارهای سنگین گرافیکی و اضافه شدن پکیج رسمی جمنای)
+        cat << 'EOF' > package.json
+        {
+          "name": "6b6t-pvp-hsbot",
+          "version": "1.0.0",
+          "description": "Autonomous Intelligent Anarchy Bot for 6b6t with Gemini Lobby Bypass",
+          "main": "bot.js",
+          "dependencies": {
+            "mineflayer": "^4.20.0",
+            "mineflayer-pathfinder": "^2.4.0",
+            "minecraft-data": "^3.73.0",
+            "express": "^4.19.2",
+            "@google/generative-ai": "latest"
+          }
+        }
+        EOF
 
-    - name: Create Bot Script (Inline)
-      run: |
+        # ۲. ساخت فایل هوشمند اصلی bot.js مجهز به بهینه‌ساز مصرف توکن جمنای
         cat << 'EOF' > bot.js
         const mineflayer = require('mineflayer');
         const { pathfinder, Movements, goals } = require('mineflayer-pathfinder');
-        const GoalFollow = goals.GoalFollow;
+        const { GoogleGenerativeAI } = require('@google/generative-ai');
+        const express = require('express');
+        const app = express();
 
-        const botArgs = {
-            host: '6b6t.org',
-            username: 'pvp_HSbot',
-            version: '1.20.4'
-        };
+        app.use(express.json());
 
-        let bot;
-        let masterPlayer = "";
+        // پیکربندی مستقیم هسته هوش مصنوعی با کلید شما داداش گلم
+        const genAI = new GoogleGenerativeAI('AIzaSyALu2HJY6eyCu--4ON2dIUOI3MtI5hZleo');
+        const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
 
-        function initBot() {
-            console.log("--- در حال اتصال بات به سرور 6b6t ---");
-            bot = mineflayer.createBot(botArgs);
+        // متغیرهای وضعیت سراسری
+        let bot = null;
+        let isInMainMap = false;
+        let autoMode = false;
+        let waitingForTpaConfirm = false;
+        let targetPlayer = null;
+        let forwardInterval = null;
+        let geminiInterval = null;
+        let chatLogs = [];
+        let recentMessages = []; 
+
+        function logToWeb(msg) {
+            const timestamp = new Date().toLocaleTimeString();
+            chatLogs.push(`[${timestamp}] ${msg}`);
+            if (chatLogs.length > 150) chatLogs.shift();
+            console.log(msg);
+        }
+
+        function printTunnelLink() {
+            try {
+                const fs = require('fs');
+                if (fs.existsSync('/tmp/cloudflare.log')) {
+                    const logContent = fs.readFileSync('/tmp/cloudflare.log', 'utf8');
+                    const match = logContent.match(/https:\/\/[^ ]*trycloudflare\.com/);
+                    if (match) {
+                        console.log('----------------------------------------------------------------------');
+                        console.log(`🌐 لینک مستقیم پنل مدیریت وب شما (بدون گرافیک سنگین): ${match[0]}`);
+                        console.log('----------------------------------------------------------------------');
+                    }
+                }
+            } catch (e) {}
+        }
+
+        // سیستم فیلتر و مانیتورینگ هوشمند جمنای با مصرف حداقلی
+        function startGeminiCheck() {
+            if (geminiInterval) clearInterval(geminiInterval);
+            
+            logToWeb('🧠 سیستم هوش مصنوعی جمنای جهت نظارت بر لابی و حل وریفای فعال شد...');
+            
+            geminiInterval = setInterval(async () => {
+                // ترمز اضطراری: اگر در مپ بودیم یا به هر دلیلی تایید شد، ثانیه‌ای ریکوئست نزن
+                if (isInMainMap) {
+                    clearInterval(geminiInterval);
+                    logToWeb('🔒 جمنای به طور کامل خاموش شد تا از سهمیه شما محافظت شود.');
+                    return;
+                }
+                if (recentMessages.length === 0) return;
+
+                try {
+                    const prompt = `You are a helper for a Minecraft bot logging into 6b6t.org anarchy server.
+Here are the recent chat/system logs:
+${recentMessages.join('\n')}
+
+Task: Has the bot successfully authenticated, passed any lobby/captcha/queue verification, and spawned inside the actual main anarchy map?
+- If YES (the bot is fully in the game map), reply with EXACTLY: YES
+- If the server explicitly asks to type a specific verification or captcha command right now, reply with EXACTLY that chat command (e.g., /verify 12345).
+- Otherwise, reply with EXACTLY: NO
+Strict rule: Reply with ONLY one word or one command. No extra conversational text.`;
+
+                    const result = await model.generateContent(prompt);
+                    const responseText = result.response.text().trim();
+                    
+                    if (responseText.toUpperCase().includes('YES')) {
+                        isInMainMap = true;
+                        autoMode = true;
+                        if (forwardInterval) clearInterval(forwardInterval);
+                        bot.clearControlStates();
+                        logToWeb('🚀 جمنای ورود موفقیت‌آمیز به مپ اصلی را تایید کرد! حالت اتوماتیک فعال و جمنای متوقف شد.');
+                        clearInterval(geminiInterval);
+                    } else if (responseText.startsWith('/')) {
+                        logToWeb(`🤖 جمنای دستور وریفای/کپچا در چت شناسایی کرد. ارسال دستور: ${responseText}`);
+                        bot.chat(responseText);
+                    }
+                } catch (err) {
+                    logToWeb(`⚠️ خطای ارتباط با سرور جمنای: ${err.message}`);
+                }
+            }, 15000); // زمان‌بندی ۱۵ ثانیه‌ای برای جلوگیری از لیمیت شدن API
+        }
+
+        function createBot() {
+            logToWeb('🚀 در حال راه‌اندازی هسته خودمختار بات و اتصال به سرور 6b6t...');
+            printTunnelLink();
+            
+            bot = mineflayer.createBot({
+                host: '6b6t.org',
+                username: 'pvp_HSbot',
+                version: '1.21.1',
+                skipValidation: true
+            });
+
             bot.loadPlugin(pathfinder);
 
-            bot.on('login', () => {
-                console.log("بات وارد سرور شد. ارسال رمز عبور...");
-                setTimeout(() => {
-                    bot.chat('/login AZHAN8585@#@#ABOL1234');
-                }, 3000);
+            bot.once('connect', () => {
+                logToWeb('🔌 سوکت اولیه شبکه باز شد. ارسال پکت هندشیک...');
+                if (bot._client) {
+                    bot._client.removeAllListeners('disconnect');
+                    bot._client.on('disconnect', (packet) => {
+                        logToWeb(`⚠️ [پکت دیسکانکت خام سرور] دریافت شد:\n${JSON.stringify(packet, null, 2)}`);
+                    });
+                }
             });
 
             bot.on('spawn', () => {
-                console.log("بات اسپاون شد. موقعیت:", bot.entity.position);
+                logToWeb('✅ بات اسپان شد. شروع عملیات عبور اتوماتیک...');
                 
-                if (bot.game.dimension === 'minecraft:overworld') {
-                    console.log("حرکت به سمت پورتال اول لابی...");
-                    let interval = setInterval(() => {
-                        bot.setControlState('forward', true);
-                        
-                        const portalBlock = bot.findBlock({
-                            matching: bot.registry.blocksByName.nether_portal.id,
-                            maxDistance: 15
-                        });
-                        
-                        if (portalBlock) {
-                            console.log("پورتال پیدا شد! حرکت به سمت آن.");
-                            bot.setControlState('forward', true);
-                        }
-                    }, 500);
+                if (!autoMode) {
+                    isInMainMap = false;
+                    recentMessages = [];
+                    startGeminiCheck(); // روشن کردن جمنای فقط برای فاز ورود
+                }
+                waitingForTpaConfirm = false;
+                targetPlayer = null;
 
-                    setTimeout(() => {
-                        clearInterval(interval);
-                        bot.setControlState('forward', false);
-                    }, 10000);
+                setTimeout(() => {
+                    bot.chat('/login AZHAN8585@#@#ABOL1234');
+                    logToWeb('➡ دستور لاگین ارسال شد.');
+
+                    if (!isInMainMap) {
+                        logToWeb('🏃‍♂️ سیستم ناوبری فعال شد: دویدن مستقیم رو به جلو و پرش هوشمند برای رد کردن پورتال لابی...');
+                        if (forwardInterval) clearInterval(forwardInterval);
+                        
+                        forwardInterval = setInterval(() => {
+                            if (!isInMainMap) {
+                                bot.setControlState('forward', true);
+                                if (bot.entity && bot.entity.isCollidedHorizontally) {
+                                    bot.setControlState('jump', true);
+                                } else {
+                                    bot.setControlState('jump', false);
+                                }
+                            } else {
+                                clearInterval(forwardInterval);
+                            }
+                        }, 100);
+                    }
+                }, 2000);
+            });
+
+            bot.on('forcedMove', () => {
+                if (autoMode && isInMainMap) {
+                    if (waitingForTpaConfirm && targetPlayer) {
+                        waitingForTpaConfirm = false;
+                        setTimeout(() => {
+                            bot.chat('/kill');
+                            targetPlayer = null;
+                        }, 1500);
+                    }
                 }
             });
 
             bot.on('chat', async (username, message) => {
                 if (username === bot.username) return;
-                masterPlayer = username;
 
-                if (message.includes('has requested to teleport to you') || message.includes('tpa')) {
-                    if (message.includes(username)) {
-                        bot.chat(`/tpaccept`);
-                        console.log(`درخواست TPA از طرف ${username} قبول شد.`);
-                    }
+                if (username === 'pvp_HS' && message === 'pvp_HSbot STOP') {
+                    autoMode = false;
+                    isInMainMap = false;
+                    if (forwardInterval) clearInterval(forwardInterval);
+                    if (bot) bot.clearControlStates();
+                    logToWeb('🛑 ترمز دستی چت بازی کشیده شد. حالت خودکار خاموش و کنترل دستی پنل باز شد.');
+                    return;
                 }
+
+                if (!autoMode || !isInMainMap) return;
 
                 if (message === 'pvp_HS tpa') {
                     bot.chat(`/tpa ${username}`);
-                    console.log(`ارسال درخواست TPA به ${username}`);
                 }
-
+                
                 if (message === 'pvp_HS totem' || message === 'pvp_HSkit') {
-                    const isTotem = message === 'pvp_HS totem';
-                    bot.chat(`قربان، دارم دنبال شالکر ${isTotem ? 'توتم' : 'کیت فایت'} می‌گردم...`);
-                    
                     const chestBlock = bot.findBlock({
-                        matching: [bot.registry.blocksByName.chest.id, bot.registry.blocksByName.trapped_chest.id],
+                        matching: [bot.registry.blocksByName['chest'].id, bot.registry.blocksByName['trapped_chest'].id],
                         maxDistance: 20
                     });
-
                     if (!chestBlock) {
-                        bot.chat("چستی در این نزدیکی پیدا نکردم!");
+                        bot.chat(`/w ${username} داداش چستی پیدا نشد!`);
                         return;
                     }
-
                     try {
                         const chest = await bot.openChest(chestBlock);
-                        let targetItem = null;
-
-                        for (const item of chest.containerItems()) {
-                            const name = item.displayName ? item.displayName.toLowerCase() : '';
-                            if (item.name.includes('shulker_box')) {
-                                if (isTotem && (name.includes('totem') || !name)) { 
-                                    targetItem = item;
-                                    break;
-                                } else if (!isTotem && (name.includes('kit') || name.includes('fight') || !name)) {
-                                    targetItem = item;
-                                    break;
-                                }
-                            }
-                        }
-
-                        if (targetItem) {
-                            await chest.withdraw(targetItem.type, null, 1);
-                            bot.chat("شالکر برداشته شد! در حال ارسال TPA به شما...");
+                        const shulkerItem = chest.containerItems().find(item => item.name.includes('shulker_box'));
+                        if (!shulkerItem) {
                             chest.close();
-                            
-                            bot.chat(`/tpa ${username}`);
-                            
-                            setTimeout(() => {
-                                bot.chat('/kill');
-                                console.log("بات خودکشی کرد تا شالکر دراپ شود.");
-                            }, 7000);
-
-                        } else {
-                            bot.chat("شالکر مورد نظر داخل چست نبود!");
-                            chest.close();
+                            bot.chat(`/w ${username} داداش شالکری نبود!`);
+                            return;
                         }
+                        await chest.withdraw(shulkerItem.type, null, 1);
+                        chest.close();
+                        targetPlayer = username;
+                        waitingForTpaConfirm = true;
+                        bot.chat(`/tpa ${username}`);
                     } catch (err) {
-                        console.log("خطا در کار با چست:", err);
+                        bot.chat(`/w ${username} باگ در چست!`);
                     }
                 }
             });
 
-            bot.on('disconnect', (packet) => {
-                console.log("!!! بات دیسکانکت شد !!! دلیل:", JSON.stringify(packet));
-                console.log("تلاش مجدد برای اتصال تا ۱۵ ثانیه دیگر...");
-                setTimeout(initBot, 15000);
+            bot.on('message', (jsonMsg) => {
+                const msg = jsonMsg.toString();
+                logToWeb(msg);
+                
+                // جمع‌آوری پیام‌ها در بافر جمنای، به شرطی که هنوز لابی را رد نکرده باشیم
+                if (!isInMainMap) {
+                    recentMessages.push(msg);
+                    if (recentMessages.length > 15) recentMessages.shift();
+                }
+                
+                if (autoMode && (msg.includes('has requested to teleport to you') || msg.includes('tpa'))) {
+                    bot.chat('/tpaccept');
+                }
+            });
+
+            bot.on('kick', (reason) => {
+                logToWeb(`❌ بات کیک شد! علت: ${JSON.stringify(reason)}`);
+            });
+
+            bot.on('end', (reason) => {
+                if (forwardInterval) clearInterval(forwardInterval);
+                if (geminiInterval) clearInterval(geminiInterval);
+                logToWeb(`🛑 ارتباط قطع شد (${reason}). تلاش مجدد سریع تا ۱۰ ثانیه دیگر...`);
+                setTimeout(() => createBot(), 10000);
             });
 
             bot.on('error', (err) => {
-                console.log("خطای بات:", err);
+                logToWeb(`❌ خطای کلاینت: ${err ? err.message : 'نامشخص'}`);
             });
         }
 
-        initBot();
+        // =====================================================================
+        // 🌐 وب سرور سبک مانیتورینگ متنی و دکمه‌های کنترل از راه دور
+        // =====================================================================
+        app.get('/', (req, res) => {
+            res.send(`
+            <!DOCTYPE html>
+            <html dir="rtl">
+            <head>
+                <meta charset="UTF-8">
+                <title>سیستم خودمختار pvp_HSbot</title>
+                <style>
+                    body { background: #121212; color: #e0e0e0; font-family: Tahoma; margin: 15px; text-align: center; }
+                    h2 { color: #4caf50; margin-bottom: 5px; }
+                    #stats { background: #1e1e1e; padding: 12px; border-radius: 8px; margin-bottom: 10px; font-size: 13px; text-align: right; border: 1px solid #333; }
+                    #console { background: #000; color: #00ff00; border: 1px solid #444; height: 320px; overflow-y: scroll; padding: 10px; font-family: monospace; text-align: left; border-radius: 6px; font-size: 12px; margin-bottom: 10px; }
+                    .pad { display: grid; grid-template-columns: repeat(3, 52px); gap: 6px; justify-content: center; margin: 10px auto; }
+                    .pad button { background: #2e7d32; color: white; border: none; padding: 12px; font-size: 15px; font-weight: bold; border-radius: 6px; cursor: pointer; }
+                </style>
+            </head>
+            <body>
+                <h2>🤖 پنل مدیریت هوشمند تحت وب (Gemini Bypass)</h2>
+                
+                <div id="dashboard-wrapper">
+                    <div id="stats">در حال دریافت داده‌ها...</div>
+                    <div id="console"></div>
+                    
+                    <div class="pad">
+                        <div></div><button onmousedown="move('forward',true)" onmouseup="move('forward',false)">W</button><div></div>
+                        <button onmousedown="move('left',true)" onmouseup="move('left',false)">A</button>
+                        <button onmousedown="move('back',true)" onmouseup="move('back',false)">S</button>
+                        <button onmousedown="move('right',true)" onmouseup="move('right',false)">D</button>
+                        <div></div><button onmousedown="move('jump',true)" onmouseup="move('jump',false)">✈️</button><div></div>
+                    </div>
+                </div>
+
+                <script>
+                    function move(action, state) {
+                        fetch('/api/move', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ action, state }) });
+                    }
+
+                    setInterval(() => {
+                        fetch('/api/status').then(r => r.json()).then(d => {
+                            document.getElementById('stats').innerHTML = 
+                                '📍 <b>موقعیت فعلی:</b> X: ' + d.pos.x + ' | Y: ' + d.pos.y + ' | Z: ' + d.pos.z + 
+                                '<br>⚙️ <b>وضعیت فاز عملیاتی:</b> ' + (d.autoMode ? '<span style="color:#4caf50;font-weight:bold;">مستقر در مپ اصلی (AUTO)</span>' : '<span style="color:#ff9800;font-weight:bold;">در حال عبور از لابی و بررسی کپچا توسط جمنای...</span>');
+                            
+                            let c = document.getElementById('console');
+                            c.innerHTML = d.logs.map(l => '<div>' + l + '</div>').join('');
+                            c.scrollTop = c.scrollHeight;
+                        });
+                    }, 1000);
+                </script>
+            </body>
+            </html>
+            `);
+        });
+
+        app.get('/api/status', (req, res) => {
+            let pos = { x: 0, y: 0, z: 0 };
+            if (bot && bot.entity && bot.entity.position) {
+                pos = { x: Math.round(bot.entity.position.x), y: Math.round(bot.entity.position.y), z: Math.round(bot.entity.position.z) };
+            }
+            res.json({ pos, autoMode, logs: chatLogs });
+        });
+
+        app.post('/api/move', (req, res) => {
+            const { action, state } = req.body;
+            if (bot && !autoMode) {
+                bot.setControlState(action, state);
+            }
+            res.sendStatus(200);
+        });
+
+        app.listen(3000, () => {
+            console.log('🌐 وب سرور مانیتورینگ روی پورت 3000 فعال شد.');
+        });
+
+        process.on('uncaughtException', (err) => { console.error('🔥 کرش پروسه:', err.message); });
+        createBot();
         EOF
 
-    - name: Start Virtual Display (Xvfb) & VNC Server
-      run: |
-        Xvfb :1 -screen 0 1280x1024x24 &
-        export DISPLAY=:1
-        sleep 2
-        fluxbox &
-        x11vnc -display :1 -nopw -listen localhost -xkb -forever &
-        websockify --web=/usr/share/novnc 8083 localhost:5900 &
-        sleep 2
+    - name: Install Dependencies
+      run: npm install
 
-    - name: Start Cloudflare Tunnel for Verification VNC
+    - name: Run Bot in Infinite Loop
       run: |
-        echo "=========================================================="
-        echo "باز کردن تونل کلودفلر برای دسترسی به مرورگر سرور..."
-        echo "=========================================================="
-        cloudflared tunnel --url http://localhost:8083 &
-        sleep 5
-
-    - name: Open Chromium in Background
-      run: |
-        export DISPLAY=:1
-        chromium-browser --no-sandbox --disable-dev-shm-usage "https://6b6t.org" &
-        sleep 3
-
-    - name: Run Minecraft Bot Session
-      run: |
-        node bot.js
+        echo "=== در حال اجرای بات با قابلیت خود-ترمیمی زنده ==="
+        while true; do
+          echo "----------------------------------------------------------------------"
+          grep -o 'https://[^ ]*trycloudflare.com' /tmp/cloudflare.log || echo "لینک موقت یافت نشد"
+          echo "----------------------------------------------------------------------"
+          node bot.js
+          echo "بات متوقف شد یا کرش کرد. طبق دستور، ۱۰ ثانیه تا راه اندازی مجدد صبر میکنیم..."
+          sleep 10
+        done
