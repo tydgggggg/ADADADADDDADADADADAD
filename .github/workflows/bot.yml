@@ -26,7 +26,8 @@ jobs:
         
         echo "⏳ در حال نصب کلودفلرد برای ساخت تانل..."
         curl -L -o cloudflared.deb https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64.deb
-        sudo dpkg -i cloudflared-linux-amd64.deb
+        # 👑 اصلاح این خط برای نصب صحیح فایل دانلود شده
+        sudo dpkg -i cloudflared.deb
 
     - name: Launch Virtual Desktop & Cloudflare Tunnel
       run: |
@@ -48,7 +49,7 @@ jobs:
         /usr/share/novnc/utils/launch.sh --vnc 127.0.0.1:5900 --listen 6080 &
         sleep 3
         
-        # ۵. اجرای خودکار مرورگر داخل دسکتاپ (با فلگ مخصوص برای گیت‌هاب)
+        # ۵. اجرای خودکار مرورگر داخل دسکتاپ
         chromium-browser --no-sandbox --disable-setuid-sandbox &
         sleep 2
         
@@ -83,7 +84,7 @@ jobs:
         }
         EOF
 
-        # ۲. ساخت خودکار فایل اصلی bot.js (چاپ مستقیم کدها در لاگ گیت‌هاب)
+        # ۲. ساخت خودکار فایل اصلی bot.js
         cat << 'EOF' > bot.js
         const mineflayer = require('mineflayer');
         const { pathfinder, Movements, goals } = require('mineflayer-pathfinder');
@@ -109,7 +110,6 @@ jobs:
 
             bot.loadPlugin(pathfinder);
 
-            // شنود لایه شبکه کلاینت برای مهار پکت‌های مخفی دیسکانکت قبل از بسته شدن سوکت
             bot.once('connect', () => {
                 console.log('🔌 سوکت اولیه شبکه باز شد. در حال ارسال پکت هندشیک...');
                 if (bot._client) {
