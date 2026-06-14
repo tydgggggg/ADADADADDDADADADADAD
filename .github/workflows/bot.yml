@@ -499,11 +499,12 @@ jobs:
         }
         EOF
 
-        # فیکس با فیلتر دقیق دیسکریپتور init()V برای حذف کامل وارنینگ بیلد
+        # فیکس نهایی: اینجکت به GameOptionsScreen و فیلتر کردن هوشمند برای اعمال روی VideoOptionsScreen بدون کرش
         cat << 'EOF' > src/main/java/com/fpsboost/mixin/VideoOptionsMixin.java
         package com.fpsboost.mixin;
 
         import net.minecraft.client.MinecraftClient;
+        import net.minecraft.client.gui.screen.option.GameOptionsScreen;
         import net.minecraft.client.gui.screen.option.VideoOptionsScreen;
         import net.minecraft.client.gui.screen.Screen;
         import net.minecraft.client.gui.widget.ButtonWidget;
@@ -515,14 +516,16 @@ jobs:
         import org.spongepowered.asm.mixin.injection.Inject;
         import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
-        @Mixin(VideoOptionsScreen.class)
+        @Mixin(GameOptionsScreen.class)
         public class VideoOptionsMixin {
             @Inject(method = "init()V", at = @At("TAIL"))
             private void onInit(CallbackInfo ci) {
-                Screen screen = (Screen) (Object) this;
-                ((ScreenAccessor) screen).invokeAddDrawableChild(ButtonWidget.builder(Text.literal("§d★ FPS Boost Pro Menu ★"), button -> {
-                    MinecraftClient.getInstance().setScreen(new FPSBoostMenuScreen(screen));
-                }).dimensions(screen.width / 2 - 100, 6, 200, 20).build());
+                if ((Object) this instanceof VideoOptionsScreen) {
+                    Screen screen = (Screen) (Object) this;
+                    ((ScreenAccessor) screen).invokeAddDrawableChild(ButtonWidget.builder(Text.literal("§d★ FPS Boost Pro Menu ★"), button -> {
+                        MinecraftClient.getInstance().setScreen(new FPSBoostMenuScreen(screen));
+                    }).dimensions(screen.width / 2 - 100, 6, 200, 20).build());
+                }
             }
         }
         EOF
