@@ -118,7 +118,7 @@ jobs:
 
         printf '\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01\x00\x00\x00\x01\x08\x06\x00\x00\x00\x1f\x15\xc4\x89\x00\x00\x00\rIDATx\x9cc`\x00\x01\x00\x00\x05\x00\x01\r\n-\xb4\x00\x00\x00\x00IEND\xaeB`\x82' > src/main/resources/icon.png
 
-        # میکسین‌های اصلی و کاملاً امن
+        # میکسین‌های اصلی و کاملاً امن (اضافه شدن ScreenAccessor)
         cat << 'EOF' > src/main/resources/fpsboost.mixins.json
         {
           "required": true,
@@ -131,7 +131,8 @@ jobs:
             "EntityRenderMixin",
             "HudMixin",
             "VideoOptionsMixin",
-            "MultiplayerScreenMixin"
+            "MultiplayerScreenMixin",
+            "ScreenAccessor"
           ],
           "injectors": { "defaultRequire": 1 }
         }
@@ -149,6 +150,24 @@ jobs:
             "WorldRendererMixin"
           ],
           "injectors": { "defaultRequire": 0 }
+        }
+        EOF
+
+        # === SCREEN ACCESSOR INTERFACE ===
+        cat << 'EOF' > src/main/java/com/fpsboost/mixin/ScreenAccessor.java
+        package com.fpsboost.mixin;
+
+        import net.minecraft.client.gui.Element;
+        import net.minecraft.client.gui.Drawable;
+        import net.minecraft.client.gui.Selectable;
+        import net.minecraft.client.gui.screen.Screen;
+        import org.spongepowered.asm.mixin.Mixin;
+        import org.spongepowered.asm.mixin.gen.Invoker;
+
+        @Mixin(Screen.class)
+        public interface ScreenAccessor {
+            @Invoker("addDrawableChild")
+            <T extends Element & Drawable & Selectable> T invokeAddDrawableChild(T child);
         }
         EOF
 
@@ -367,6 +386,7 @@ jobs:
         }
         EOF
 
+        # فیکس خطای وجود نداشتن isNonBoss و فیکس متدهای جایگزین فیلدهای خصوصی width و height
         cat << 'EOF' > src/main/java/com/fpsboost/mixin/EntityRenderMixin.java
         package com.fpsboost.mixin;
 
@@ -392,7 +412,7 @@ jobs:
                     return; 
                 }
                 
-                if (!entity.isNonBoss() || entity.getType().getDimensions().width > 1.5f || entity.getType().getDimensions().height > 2.5f) {
+                if (entity.getType().getDimensions().width() > 1.5f || entity.getType().getDimensions().height() > 2.5f) {
                     return;
                 }
 
@@ -480,6 +500,7 @@ jobs:
         }
         EOF
 
+        # فیکس خطای دسترسی protected متد addDrawableChild با استفاده از ScreenAccessor
         cat << 'EOF' > src/main/java/com/fpsboost/mixin/VideoOptionsMixin.java
         package com.fpsboost.mixin;
 
@@ -489,6 +510,7 @@ jobs:
         import net.minecraft.client.gui.widget.ButtonWidget;
         import net.minecraft.text.Text;
         import com.fpsboost.ui.FPSBoostMenuScreen;
+        import com.fpsboost.mixin.ScreenAccessor;
         import org.spongepowered.asm.mixin.Mixin;
         import org.spongepowered.asm.mixin.injection.At;
         import org.spongepowered.asm.mixin.injection.Inject;
@@ -499,13 +521,14 @@ jobs:
             @Inject(method = "init", at = @At("TAIL"))
             private void onInit(CallbackInfo ci) {
                 Screen screen = (Screen) (Object) this;
-                screen.addDrawableChild(ButtonWidget.builder(Text.literal("§d★ FPS Boost Pro Menu ★"), button -> {
+                ((ScreenAccessor) screen).invokeAddDrawableChild(ButtonWidget.builder(Text.literal("§d★ FPS Boost Pro Menu ★"), button -> {
                     MinecraftClient.getInstance().setScreen(new FPSBoostMenuScreen(screen));
                 }).dimensions(screen.width / 2 - 100, 6, 200, 20).build());
             }
         }
         EOF
 
+        # فیکس خطای دسترسی protected متد addDrawableChild با استفاده از ScreenAccessor
         cat << 'EOF' > src/main/java/com/fpsboost/mixin/MultiplayerScreenMixin.java
         package com.fpsboost.mixin;
 
@@ -515,6 +538,7 @@ jobs:
         import net.minecraft.client.gui.widget.ButtonWidget;
         import net.minecraft.text.Text;
         import com.fpsboost.ui.FPSBoostMenuScreen;
+        import com.fpsboost.mixin.ScreenAccessor;
         import org.spongepowered.asm.mixin.Mixin;
         import org.spongepowered.asm.mixin.injection.At;
         import org.spongepowered.asm.mixin.injection.Inject;
@@ -525,7 +549,7 @@ jobs:
             @Inject(method = "init", at = @At("TAIL"))
             private void onInit(CallbackInfo ci) {
                 Screen screen = (Screen) (Object) this;
-                screen.addDrawableChild(ButtonWidget.builder(Text.literal("§dFPS Boost Pro"), button -> {
+                ((ScreenAccessor) screen).invokeAddDrawableChild(ButtonWidget.builder(Text.literal("§dFPS Boost Pro"), button -> {
                     MinecraftClient.getInstance().setScreen(new FPSBoostMenuScreen(screen));
                 }).dimensions(5, 5, 95, 20).build());
             }
