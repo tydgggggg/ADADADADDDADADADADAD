@@ -62,7 +62,7 @@ jobs:
             minecraft "com.mojang:minecraft:1.21.1"
             mappings "net.fabricmc:yarn:1.21.1+build.2:v2"
             modImplementation "net.fabricmc:fabric-loader:0.16.0"
-            modImplementation "net.fabricmc.fabric-api:fabric-api:0.100.1+1.21.1"
+            modImplementation "net.fabricmc.fabric-api:fabric-api:0.116.4+1.21.1"
             implementation "com.google.code.gson:gson:2.10.1"
         }
         processResources {
@@ -358,7 +358,6 @@ jobs:
                                 return;
                             }
                         }
-                        // افزایش مسافت رندر تایل‌ها برای رفع باگ Popping زشت چست‌ها و شالکرها
                         if (dist > 2304.0) { 
                             ci.cancel();
                         }
@@ -393,7 +392,6 @@ jobs:
                     return; 
                 }
                 
-                // استثنا کردن باس‌ها و ماب‌های بزرگ چثه از محاسبات کالینگ جهت رفع غیب شدن ناگهانی اژدها و ویدر
                 if (!entity.isNonBoss() || entity.getType().getDimensions().width > 1.5f || entity.getType().getDimensions().height > 2.5f) {
                     return;
                 }
@@ -556,7 +554,6 @@ jobs:
         }
         EOF
 
-        # === WORLD RENDERER MIXIN (FIXED SIGNATURE & REMOVED RENDERSKY DAMAGE) ===
         cat << 'EOF' > src/main/java/com/fpsboost/mixin/WorldRendererMixin.java
         package com.fpsboost.mixin;
 
@@ -571,7 +568,6 @@ jobs:
 
         @Mixin(WorldRenderer.class)
         public class WorldRendererMixin {
-            // تصحیح امضای متد با ۲ عدد ماتریکس 4f طبق مپینگ یارن 1.21.1 برای جلوگیری از کرش بیلد
             @Inject(method = "renderClouds", at = @At("HEAD"), cancellable = true)
             private void onRenderClouds(MatrixStack matrices, Matrix4f modelMatrix, Matrix4f projectionMatrix, float tickDelta, double cameraX, double cameraY, double cameraZ, CallbackInfo ci) {
                 if (ModConfig.disableClouds) {
@@ -588,7 +584,6 @@ jobs:
         }
         EOF
 
-        # === ENGINE (STUTTER CONTROL & RECOOLDOWN TWEAKS) ===
         cat << 'EOF' > src/main/java/com/fpsboost/ui/FastOptimizeEngine.java
         package com.fpsboost.ui;
 
@@ -606,7 +601,6 @@ jobs:
                 try {
                     client.options.getViewDistance().setValue(2);
                     client.options.getSimulationDistance().setValue(4);
-                    // فراخوانی امن و تکی بدون قرارگیری داخل لوپ‌های مخرب چانک ریلودر پوژاو
                     client.options.write();
                     ModConfig.save();
                     
@@ -629,7 +623,6 @@ jobs:
                 if (ModConfig.memoryOptimization) {
                     if (client.worldRenderer != null && ModConfig.dynamicDistances) {
                         distanceCooldown++;
-                        // بالا بردن کول‌داون بررسی ری‌بیلد چانک‌ها به ۱۵ فرکانس جهت حذف استاتر و مایکرو‌لگ شدید روی موبایل
                         if (distanceCooldown >= 15) { 
                             distanceCooldown = 0;
                             int currentFps = client.getCurrentFps();
@@ -647,7 +640,6 @@ jobs:
         }
         EOF
 
-        # === SCREEN UI ===
         cat << 'EOF' > src/main/java/com/fpsboost/ui/FPSBoostMenuScreen.java
         package com.fpsboost.ui;
 
@@ -693,7 +685,6 @@ jobs:
                 context.drawCenteredTextWithShadow(this.textRenderer, "§dFPS Boost Pro Engine v3.0 (Independent)", this.width / 2, 15, 0xFFFFFF);
                 context.drawCenteredTextWithShadow(this.textRenderer, "§7Designed for Performance Optimization on PojavLauncher", this.width / 2, 28, 0xAAAAAA);
                 
-                // نمایش وضعیت سازگاری مادهای مکمل گرافیکی مثل سدیم و انتیتی کالینگ در داشبورد اصلی منو
                 String sodiumStatus = ModConfig.isSodiumLoaded ? "§aSodium Checked" : "§eSodium Not Loaded";
                 String entityCullingStatus = ModConfig.isEntityCullingLoaded ? "§aEntityCulling Active" : "§7EntityCulling Inactive";
                 context.drawCenteredTextWithShadow(this.textRenderer, sodiumStatus + " §7| " + entityCullingStatus, this.width / 2, this.height - 22, 0xAAAAAA);
@@ -817,7 +808,6 @@ jobs:
                     this.client.setScreen(new AddonSettingsScreen(this.parent));
                 }).dimensions(startX + 170, startY + 72, btnWidth, 20).build());
 
-                // دکمه Sky Optimization و الگوهای اضافی فلوید کلا حذف و گریدبندی با المان‌های زیر بازسازی شد
                 this.addDrawableChild(ButtonWidget.builder(Text.literal("Beacon Beam Cull: " + (ModConfig.optimizeBeacon ? "§aON" : "§cOFF")), button -> {
                     ModConfig.optimizeBeacon = !ModConfig.optimizeBeacon; ModConfig.save();
                     this.client.setScreen(new AddonSettingsScreen(this.parent));
