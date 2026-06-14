@@ -1,4 +1,4 @@
-name: Run 6b6t Anarchy Bot 24/7
+name: Build FPS Boost Mod Pro
 
 on:
   push:
@@ -6,440 +6,849 @@ on:
   workflow_dispatch:
 
 jobs:
-  run-bot:
+  build-mod:
     runs-on: ubuntu-latest
 
     steps:
     - name: Checkout Repository
       uses: actions/checkout@v4
 
-    - name: Set up Node.js
-      uses: actions/setup-node@v4
+    - name: Set up JDK 21
+      uses: actions/setup-java@v4
       with:
-        node-version: '20'
+        java-version: '21'
+        distribution: 'temurin'
 
-    - name: Install Cloudflared & Browser Dependencies
-      run: |
-        echo "⏳ در حال نصب کلودفلرد و نیازمندی‌های مرورگر لینوکس..."
-        curl -L -o cloudflared.deb https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64.deb
-        sudo dpkg -i cloudflared.deb
-        sudo apt-get update && sudo apt-get install -y wget gnupg ca-certificates procps libxss1 libasound2t64 libatk-bridge2.0-0 libgtk-3-0 libgbm1
+    - name: Create Temporary Settings File
+      run: touch settings.gradle
 
-    - name: Launch Cloudflare Tunnel
-      run: |
-        echo "🚀 در حال راه‌اندازی تانل مستقیم برای وب سرور مدیریت وب..."
-        cloudflared tunnel --url http://127.0.0.1:3000 > cloudflare.log 2>&1 &
-        sleep 5
-        cp cloudflare.log /tmp/cloudflare.log
+    - name: Setup Gradle Wrapper (v8.9)
+      run: gradle wrapper --gradle-version 8.9
 
-    - name: Create Project Files (package.json & bot.js)
+    - name: Generate Advanced Mod Files
       run: |
-        # ۱. ساخت فایل package.json همراه با پپتیر
-        cat << 'EOF' > package.json
+        echo "=== در حال تزریق کدهای بهینه‌ساز مستقل و پیشرفته v3.0 (نسخه فیکس شده) ==="
+        mkdir -p src/main/java/com/fpsboost/config
+        mkdir -p src/main/java/com/fpsboost/mixin
+        mkdir -p src/main/java/com/fpsboost/ui
+        mkdir -p src/main/java/com/fpsboost
+        mkdir -p src/main/resources
+
+        cat << 'EOF' > settings.gradle
+        pluginManagement {
+            repositories {
+                maven { url "https://maven.fabricmc.net/" }
+                mavenCentral()
+            }
+        }
+        rootProject.name = "FPSBoostPro"
+        EOF
+
+        cat << 'EOF' > gradle.properties
+        org.gradle.jvmargs=-Xmx2G
+        EOF
+
+        cat << 'EOF' > build.gradle
+        plugins {
+            id 'fabric-loom' version '1.7-SNAPSHOT'
+        }
+        version = '3.0.0'
+        group = 'com.fpsboost'
+        repositories { 
+            mavenCentral() 
+            maven { url "https://maven.fabricmc.net/" }
+        }
+        dependencies {
+            minecraft "com.mojang:minecraft:1.21.1"
+            mappings "net.fabricmc:yarn:1.21.1+build.2:v2"
+            modImplementation "net.fabricmc:fabric-loader:0.16.0"
+            modImplementation "net.fabricmc.fabric-api:fabric-api:0.100.1+1.21.1"
+            implementation "com.google.code.gson:gson:2.10.1"
+        }
+        processResources {
+            inputs.property "version", project.version
+            filteringCharset "UTF-8"
+            filesMatching("fabric.mod.json") { expand "version": project.version }
+        }
+        tasks.withType(JavaCompile).configureEach { it.options.release = 21 }
+        EOF
+
+        cat << 'EOF' > src/main/java/com/fpsboost/ModInit.java
+        package com.fpsboost;
+
+        import net.fabricmc.api.ClientModInitializer;
+        import com.fpsboost.config.ModConfig;
+
+        public class ModInit implements ClientModInitializer {
+            @Override
+            public void onInitializeClient() {
+                ModConfig.load();
+            }
+        }
+        EOF
+
+        cat << 'EOF' > src/main/resources/fabric.mod.json
         {
-          "name": "6b6t-pvp-hsbot",
-          "version": "1.0.0",
-          "description": "Autonomous Intelligent Anarchy Bot for 6b6t with Gemini Lobby Bypass",
-          "main": "bot.js",
-          "dependencies": {
-            "mineflayer": "^4.20.0",
-            "mineflayer-pathfinder": "^2.4.0",
-            "minecraft-data": "^3.73.0",
-            "express": "^4.19.2",
-            "@google/generative-ai": "latest",
-            "puppeteer": "^22.6.0"
+          "schemaVersion": 1,
+          "id": "fpsboost_pro",
+          "version": "${version}",
+          "name": "FPS Boost Pro",
+          "description": "An independent, powerful FPS optimization utility client designed specifically for PojavLauncher.",
+          "authors": [ "kill_pv2" ],
+          "contact": {},
+          "license": "MIT",
+          "environment": "client",
+          "icon": "icon.png",
+          "entrypoints": { 
+            "client": [
+              "com.fpsboost.ModInit"
+            ]
+          },
+          "mixins": [ 
+            "fpsboost.mixins.json",
+            "fpsboost-fallback.mixins.json"
+          ],
+          "depends": { 
+            "fabricloader": ">=0.16.0", 
+            "fabric-api": "*",
+            "minecraft": "1.21.1" 
           }
         }
         EOF
 
-        # ۲. ساخت فایل هوشمند اصلی bot.js با سیستم خودکار وریفای سایت و پورتال‌ها
-        cat << 'EOF' > bot.js
-        const mineflayer = require('mineflayer');
-        const { pathfinder, Movements, goals } = require('mineflayer-pathfinder');
-        const { GoogleGenerativeAI } = require('@google/generative-ai');
-        const puppeteer = require('puppeteer');
-        const express = require('express');
-        const app = express();
+        printf '\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01\x00\x00\x00\x01\x08\x06\x00\x00\x00\x1f\x15\xc4\x89\x00\x00\x00\rIDATx\x9cc`\x00\x01\x00\x00\x05\x00\x01\r\n-\xb4\x00\x00\x00\x00IEND\xaeB`\x82' > src/main/resources/icon.png
 
-        app.use(express.json());
-
-        // پیکربندی هسته هوش مصنوعی با کلید جدید و دقیق شما داداش گلم
-        const genAI = new GoogleGenerativeAI('AQ.Ab8RN6LgR3sgqSN4mvfrIM-7KUPpDWul55EdJksMr06LQm42fA');
-        const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
-
-        // متغیرهای وضعیت سراسری
-        let bot = null;
-        let isInMainMap = false;
-        let autoMode = false;
-        let waitingForTpaConfirm = false;
-        let targetPlayer = null;
-        let forwardInterval = null;
-        let chatLogs = [];
-        let portalStage = 0; // شمارشگر پورتال‌های رد شده (۰ تا ۲)
-        let isVerifyingWeb = false;
-
-        function logToWeb(msg) {
-            const timestamp = new Date().toLocaleTimeString();
-            chatLogs.push(`[${timestamp}] ${msg}`);
-            if (chatLogs.length > 150) chatLogs.shift();
-            console.log(msg);
+        # میکسین‌های اصلی و کاملاً امن
+        cat << 'EOF' > src/main/resources/fpsboost.mixins.json
+        {
+          "required": true,
+          "minVersion": "0.8",
+          "package": "com.fpsboost.mixin",
+          "compatibilityLevel": "JAVA_21",
+          "mixins": [ 
+            "ParticleManagerMixin",
+            "BlockEntityRenderMixin",
+            "EntityRenderMixin",
+            "HudMixin",
+            "VideoOptionsMixin",
+            "MultiplayerScreenMixin"
+          ],
+          "injectors": { "defaultRequire": 1 }
         }
-
-        function printTunnelLink() {
-            try {
-                const fs = require('fs');
-                if (fs.existsSync('/tmp/cloudflare.log')) {
-                    const logContent = fs.readFileSync('/tmp/cloudflare.log', 'utf8');
-                    const match = logContent.match(/https:\/\/[^ ]*trycloudflare\.com/);
-                    if (match) {
-                        console.log('----------------------------------------------------------------------');
-                        console.log(`🌐 لینک مستقیم پنل مدیریت وب شما: ${match[0]}`);
-                        console.log('----------------------------------------------------------------------');
-                    }
-                }
-            } catch (e) {}
-        }
-
-        // تابع اتوماسیون مرورگر و حل کپچای سایت توسط جمنای
-        async function runWebVerification(verifyCode) {
-            if (isVerifyingWeb) return;
-            isVerifyingWeb = true;
-            logToWeb(`🌐 شروع فرآیند مرورگر زنده برای تایید هویت در سایت با کد: ${verifyCode}`);
-            
-            try {
-                const browser = await puppeteer.launch({
-                    headless: true,
-                    args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage']
-                });
-                const page = await browser.newPage();
-                await page.setViewport({ width: 1280, height: 800 });
-                
-                logToWeb('🌐 در حال باز کردن صفحه وریفای سرور...');
-                await page.goto('https://www.6b6t.org/en/verify', { waitUntil: 'networkidle2', timeout: 60000 });
-
-                // وارد کردن نام کاربری بات در کادر اول و کد در کادر دوم
-                const inputs = await page.$$('input');
-                if (inputs.length >= 2) {
-                    await inputs[0].type('pvp_HSbot', { delay: 50 });
-                    await inputs[1].type(verifyCode, { delay: 50 });
-                    logToWeb('✍️ نام کاربری و کد ۶ رقمی با موفقیت در فرم درج شد.');
-                }
-
-                await new Promise(r => setTimeout(r, 2000));
-                
-                // اسکرین‌شات از صفحه برای آنالیز کپچا توسط بینایی جمنای
-                const screenshotBase64 = await page.screenshot({ encoding: 'base64' });
-                logToWeb('📸 اسکرین‌شات کپچا برای بررسی به جمنای ارسال شد...');
-
-                const imagePart = {
-                    inlineData: { data: screenshotBase64, mimeType: "image/png" }
-                };
-
-                const captchaPrompt = `This is a verification page for a Minecraft server. We filled the username and code.
-                Now look at the captcha checkbox / Turnstile / reCAPTCHA widget on this page.
-                Find the exact location of the checkbox or verification tick area.
-                Provide the approximate X and Y coordinates on a 1280x800 screen to click it.
-                Format your response exactly as: CLICK: X=[pixel], Y=[pixel]
-                If it's already ticked or just needs submission, reply: CLICK: SUBMIT`;
-
-                const result = await model.generateContent([captchaPrompt, imagePart]);
-                const aiResponse = result.response.text().trim();
-                logToWeb(`🧠 تحلیل کپچای جمنای: ${aiResponse}`);
-
-                if (aiResponse.toUpperCase().includes('CLICK: X=')) {
-                    const match = aiResponse.match(/X=(\d+),\s*Y=(\d+)/i);
-                    if (match) {
-                        const clickX = parseInt(match[1]);
-                        const clickY = parseInt(match[2]);
-                        await page.mouse.click(clickX, clickY);
-                        logToWeb(`🖱 جمنای روی نقطه کپچا کلیک کرد (X: ${clickX}, Y: ${clickY})`);
-                        await new Promise(r => setTimeout(r, 6000)); // زمان جهت باز شدن یا حل تیک کپچا
-                    }
-                }
-
-                // پیدا کردن و فشردن دکمه Submit Verification
-                const buttons = await page.$$('button');
-                let clickedSubmit = false;
-                for (let btn of buttons) {
-                    const text = await page.evaluate(el => el.textContent, btn);
-                    if (text.includes('Submit') || text.includes('Verification') || text.includes('Verify')) {
-                        await btn.click();
-                        logToWeb('✅ دکمه Submit Verification با موفقیت فشرده شد.');
-                        clickedSubmit = true;
-                        break;
-                    }
-                }
-
-                if (!clickedSubmit) {
-                    // روش زاپاس کلیک روی فرم یا دکمه ارسال در صورت پیدا نشدن متن
-                    await page.keyboard.press('Enter');
-                    logToWeb('⌨️ کلید اینتر به عنوان زاپاس برای ثبت فرم فشرده شد.');
-                }
-
-                await new Promise(r => setTimeout(r, 4000));
-                await browser.close();
-                logToWeb('🎉 فرآیند وب وریفای با موفقیت پایان یافت. مرورگر بسته شد.');
-            } catch (err) {
-                logToWeb(`❌ خطای جدی در عملکرد وب وریفای پپتیر: ${err.message}`);
-            } finally {
-                isVerifyingWeb = false;
-                // بعد از اتمام کار وب، بلافاصله مجدداً هسته گیم کانکت می‌شود
-                setTimeout(() => createBot(), 2000);
-            }
-        }
-
-        function createBot() {
-            if (isVerifyingWeb) return; // اگر در حال کار با سایت است فعلا کلاینت بازی صبر کند
-
-            logToWeb('🚀 در حال اتصال کلاینت ماینکرفت به سرور 6b6t...');
-            printTunnelLink();
-            
-            bot = mineflayer.createBot({
-                host: '6b6t.org',
-                username: 'pvp_HSbot',
-                version: '1.21.1',
-                skipValidation: true
-            });
-
-            bot.loadPlugin(pathfinder);
-
-            bot.once('connect', () => {
-                logToWeb('🔌 سوکت شبکه بازی باز شد. ارسال پکت هندشیک...');
-                
-                // 🛠 فیکس هوشمند فاز لاگین: شنود دیسکانکت خام قبل از مرحله Spawn برای استخراج متن کیک
-                if (bot._client) {
-                    bot._client.once('disconnect', (packet) => {
-                        try {
-                            const rawReason = JSON.stringify(packet.reason || packet);
-                            logToWeb(`📥 پکت دیسکانکت خام در فاز لاگین رصد شد.`);
-                            const codeMatch = rawReason.match(/\b\d{6}\b/);
-                            if (codeMatch) {
-                                const extractedCode = codeMatch[0];
-                                logToWeb(`🔑 مژده! کد ۶ رقمی از دیسکانکت خام استخراج شد: ${extractedCode}`);
-                                if (forwardInterval) clearInterval(forwardInterval);
-                                runWebVerification(extractedCode);
-                            }
-                        } catch (e) {}
-                    });
-                }
-            });
-
-            bot.on('spawn', () => {
-                logToWeb('✅ بات داخل لابی اسپان شد.');
-                waitingForTpaConfirm = false;
-                targetPlayer = null;
-
-                if (isInMainMap) {
-                    logToWeb('👑 بات قبلاً در مپ اصلی مستقر شده است. حالت خودکار چت فعال است.');
-                    return;
-                }
-
-                setTimeout(() => {
-                    bot.chat('/login AZHAN8585@#@#ABOL1234');
-                    logToWeb('➡ دستور لاگین به سرور ارسال شد.');
-
-                    // سیستم ناوبری عبور متوالی از پورتال‌های اول و دوم
-                    logToWeb(`🏃‍♂️ سیستم ناوبری استارت شد. در حال حرکت به سمت پورتال فاز: ${portalStage + 1}`);
-                    if (forwardInterval) clearInterval(forwardInterval);
-                    
-                    forwardInterval = setInterval(() => {
-                        if (!isInMainMap) {
-                            bot.setControlState('forward', true);
-                            if (bot.entity && bot.entity.isCollidedHorizontally) {
-                                bot.setControlState('jump', true);
-                            } else {
-                                bot.setControlState('jump', false);
-                            }
-                        } else {
-                            clearInterval(forwardInterval);
-                        }
-                    }, 100);
-                }, 2000);
-            });
-
-            // رویداد جابجایی اجباری یا دایمنشن چنج که نشان‌دهنده ورود به پورتال است
-            bot.on('forcedMove', () => {
-                if (!isInMainMap) {
-                    portalStage++;
-                    logToWeb(`🌀 بات یک پورتال را رد کرد! تعداد پورتال‌های عبور شده: ${portalStage}`);
-                    
-                    if (portalStage >= 2) {
-                        isInMainMap = true;
-                        autoMode = true;
-                        if (forwardInterval) clearInterval(forwardInterval);
-                        bot.clearControlStates();
-                        logToWeb('⚡ تایید نهایی: بات از هر دو پورتال لابی عبور کرد و وارد مپ اصلی شد! هوش مصنوعی جمنای خاموش شد.');
-                    }
-                }
-            });
-
-            bot.on('chat', async (username, message) => {
-                if (username === bot.username) return;
-
-                if (username === 'pvp_HS' && message === 'pvp_HSbot STOP') {
-                    autoMode = false;
-                    isInMainMap = false;
-                    portalStage = 0;
-                    if (forwardInterval) clearInterval(forwardInterval);
-                    if (bot) bot.clearControlStates();
-                    logToWeb('🛑 کنترلر خودکار متوقف و حالت دستی فعال شد.');
-                    return;
-                }
-
-                if (!autoMode || !isInMainMap) return;
-
-                if (message === 'pvp_HS tpa') {
-                    bot.chat(`/tpa ${username}`);
-                }
-                
-                if (message === 'pvp_HS totem' || message === 'pvp_HSkit') {
-                    const chestBlock = bot.findBlock({
-                        matching: [bot.registry.blocksByName['chest'].id, bot.registry.blocksByName['trapped_chest'].id],
-                        maxDistance: 20
-                    });
-                    if (!chestBlock) {
-                        bot.chat(`/w ${username} داداش چستی پیدا نشد!`);
-                        return;
-                    }
-                    try {
-                        const chest = await bot.openChest(chestBlock);
-                        const shulkerItem = chest.containerItems().find(item => item.name.includes('shulker_box'));
-                        if (!shulkerItem) {
-                            chest.close();
-                            bot.chat(`/w ${username} داداش شالکری نبود!`);
-                            return;
-                        }
-                        await chest.withdraw(shulkerItem.type, null, 1);
-                        chest.close();
-                        targetPlayer = username;
-                        waitingForTpaConfirm = true;
-                        bot.chat(`/tpa ${username}`);
-                    } catch (err) {
-                        bot.chat(`/w ${username} باگ در چست!`);
-                    }
-                }
-            });
-
-            bot.on('message', (jsonMsg) => {
-                const msg = jsonMsg.toString();
-                logToWeb(msg);
-                
-                if (autoMode && (msg.includes('has requested to teleport to you') || msg.includes('tpa'))) {
-                    bot.chat('/tpaccept');
-                }
-            });
-
-            // شکار پیام دیسکانکت استاندارد در فاز Play
-            bot.on('kick', (reason) => {
-                const reasonStr = JSON.stringify(reason);
-                logToWeb(`❌ بات دیسکانکت شد. علت: ${reasonStr}`);
-                
-                const codeMatch = reasonStr.match(/\b\d{6}\b/);
-                if (codeMatch) {
-                    const extractedCode = codeMatch[0];
-                    logToWeb(`🔑 مژده! کد ۶ رقمی وریفای کشف شد: ${extractedCode}`);
-                    if (forwardInterval) clearInterval(forwardInterval);
-                    runWebVerification(extractedCode);
-                }
-            });
-
-            bot.on('end', (reason) => {
-                if (forwardInterval) clearInterval(forwardInterval);
-                if (!isVerifyingWeb) {
-                    logToWeb(`🛑 ارتباط با سرور قطع شد (${reason}). تلاش مجدد تا ۱۰ ثانیه دیگر...`);
-                    setTimeout(() => createBot(), 10000);
-                }
-            });
-
-            bot.on('error', (err) => {
-                logToWeb(`❌ خطای کلاینت: ${err ? err.message : 'نامشخص'}`);
-            });
-        }
-
-        app.get('/', (req, res) => {
-            res.send(`
-            <!DOCTYPE html>
-            <html dir="rtl">
-            <head>
-                <meta charset="UTF-8">
-                <title>سیستم خودمختار pvp_HSbot</title>
-                <style>
-                    body { background: #121212; color: #e0e0e0; font-family: Tahoma; margin: 15px; text-align: center; }
-                    h2 { color: #4caf50; margin-bottom: 5px; }
-                    #stats { background: #1e1e1e; padding: 12px; border-radius: 8px; margin-bottom: 10px; font-size: 13px; text-align: right; border: 1px solid #333; }
-                    #console { background: #000; color: #00ff00; border: 1px solid #444; height: 320px; overflow-y: scroll; padding: 10px; font-family: monospace; text-align: left; border-radius: 6px; font-size: 12px; margin-bottom: 10px; }
-                    .pad { display: grid; grid-template-columns: repeat(3, 52px); gap: 6px; justify-content: center; margin: 10px auto; }
-                    .pad button { background: #2e7d32; color: white; border: none; padding: 12px; font-size: 15px; font-weight: bold; border-radius: 6px; cursor: pointer; }
-                </style>
-            </head>
-            <body>
-                <h2>🤖 پنل مدیریت هوشمند تحت وب (Full Automation Mode)</h2>
-                <div id="dashboard-wrapper">
-                    <div id="stats">در حال دریافت داده‌ها...</div>
-                    <div id="console"></div>
-                    <div class="pad">
-                        <div></div><button onmousedown="move('forward',true)" onmouseup="move('forward',false)">W</button><div></div>
-                        <button onmousedown="move('left',true)" onmouseup="move('left',false)">A</button>
-                        <button onmousedown="move('back',true)" onmouseup="move('back',false)">S</button>
-                        <button onmousedown="move('right',true)" onmouseup="move('right',false)">D</button>
-                        <div></div><button onmousedown="move('jump',true)" onmouseup="move('jump',false)">✈️</button><div></div>
-                    </div>
-                </div>
-                <script>
-                    function move(action, state) {
-                        fetch('/api/move', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ action, state }) });
-                    }
-                    setInterval(() => {
-                        fetch('/api/status').then(r => r.json()).then(d => {
-                            document.getElementById('stats').innerHTML = 
-                                '📍 <b>موقعیت فعلی:</b> X: ' + d.pos.x + ' | Y: ' + d.pos.y + ' | Z: ' + d.pos.z + 
-                                '<br>⚙️ <b>وضعیت فاز عملیاتی:</b> ' + (d.autoMode ? '<span style="color:#4caf50;font-weight:bold;">مستقر در مپ اصلی (AUTO) - جمنای خاموش</span>' : '<span style="color:#ff9800;font-weight:bold;">در حال مانیتورینگ لابی، وریفای خودکار وب و عبور از پورتال‌ها...</span>');
-                            let c = document.getElementById('console');
-                            c.innerHTML = d.logs.map(l => '<div>' + l + '</div>').join('');
-                            c.scrollTop = c.scrollHeight;
-                        });
-                    }, 1000);
-                </script>
-            </body>
-            </html>
-            `);
-        });
-
-        app.get('/api/status', (req, res) => {
-            let pos = { x: 0, y: 0, z: 0 };
-            if (bot && bot.entity && bot.entity.position) {
-                pos = { x: Math.round(bot.entity.position.x), y: Math.round(bot.entity.position.y), z: Math.round(bot.entity.position.z) };
-            }
-            res.json({ pos, autoMode, logs: chatLogs });
-        });
-
-        app.post('/api/move', (req, res) => {
-            const { action, state } = req.body;
-            if (bot && !autoMode) {
-                bot.setControlState(action, state);
-            }
-            res.sendStatus(200);
-        });
-
-        app.listen(3000, () => {
-            console.log('🌐 وب سرور مانیتورینگ روی پورت 3000 فعال شد.');
-        });
-
-        process.on('uncaughtException', (err) => { console.error('🔥 کرش پروسه:', err.message); });
-        createBot();
         EOF
 
-    - name: Install Dependencies
-      run: npm install
+        # میکسین‌های ریسکی با مقادیر امن (Fallback System)
+        cat << 'EOF' > src/main/resources/fpsboost-fallback.mixins.json
+        {
+          "required": false,
+          "minVersion": "0.8",
+          "package": "com.fpsboost.mixin",
+          "compatibilityLevel": "JAVA_21",
+          "mixins": [ 
+            "FogRenderMixin",
+            "WorldRendererMixin"
+          ],
+          "injectors": { "defaultRequire": 0 }
+        }
+        EOF
 
-    - name: Run Bot in Infinite Loop
-      run: |
-        echo "=== در حال اجرای بات با قابلیت خود-ترمیمی زنده ==="
-        while true; do
-          echo "----------------------------------------------------------------------"
-          grep -o 'https://[^ ]*trycloudflare.com' /tmp/cloudflare.log || echo "لینک موقت یافت نشد"
-          echo "----------------------------------------------------------------------"
-          node bot.js
-          echo "بات متوقف شد یا کرش کرد. طبق دستور، ۱۰ ثانیه تا راه اندازی مجدد صبر میکنیم..."
-          sleep 10
-        done
+        # === CONFIG SYSTEM (REFACTORED FOR COMPATIBILITY & NO OVERRIDES) ===
+        cat << 'EOF' > src/main/java/com/fpsboost/config/ModConfig.java
+        package com.fpsboost.config;
+
+        import net.fabricmc.loader.api.FabricLoader;
+        import com.google.gson.Gson;
+        import com.google.gson.GsonBuilder;
+        import java.io.File;
+        import java.io.FileReader;
+        import java.io.FileWriter;
+
+        public class ModConfig {
+            public static boolean cullEntities = true;
+            public static boolean cullBlockEntities = true;
+            public static boolean limitParticles = true;
+            public static boolean limitItems = true;
+            public static boolean cullArmorStands = true;
+            public static boolean dynamicDistances = true;
+            public static boolean memoryOptimization = true;
+            public static boolean disableFog = true;
+            public static boolean disableClouds = true;
+            public static boolean disableWeather = true;
+            public static boolean optimizeBeacon = true;
+            public static boolean showFpsHud = true;
+            public static String activeProfile = "Not Detected";
+            
+            public static boolean isSodiumLoaded = false;
+            public static boolean isEntityCullingLoaded = false;
+
+            private static File getConfigFile() {
+                return FabricLoader.getInstance().getConfigDir().resolve("fpsboost_config.json").toFile();
+            }
+
+            private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
+
+            public static void load() {
+                checkCompatibility();
+                File file = getConfigFile();
+                if (!file.exists()) {
+                    String detected = getAutoDetectProfile();
+                    applyProfileDefaults(detected);
+                    save();
+                    return;
+                }
+                try (FileReader reader = new FileReader(file)) {
+                    ConfigHolder holder = GSON.fromJson(reader, ConfigHolder.class);
+                    if (holder != null) {
+                        cullEntities = holder.cullEntities;
+                        cullBlockEntities = holder.cullBlockEntities;
+                        limitParticles = holder.limitParticles;
+                        limitItems = holder.limitItems;
+                        cullArmorStands = holder.cullArmorStands;
+                        dynamicDistances = holder.dynamicDistances;
+                        memoryOptimization = holder.memoryOptimization;
+                        disableFog = holder.disableFog;
+                        disableClouds = holder.disableClouds;
+                        disableWeather = holder.disableWeather;
+                        optimizeBeacon = holder.optimizeBeacon;
+                        showFpsHud = holder.showFpsHud;
+                        activeProfile = holder.activeProfile;
+                    }
+                } catch (Exception e) {
+                    e.printStackTrace();
+                }
+                
+                enforceCompatibilityRules();
+            }
+
+            public static void save() {
+                try (FileWriter writer = new FileWriter(getConfigFile())) {
+                    ConfigHolder holder = new ConfigHolder();
+                    GSON.toJson(holder, writer);
+                } catch (Exception e) {
+                    e.printStackTrace();
+                }
+            }
+
+            private static void checkCompatibility() {
+                isSodiumLoaded = FabricLoader.getInstance().isModLoaded("sodium");
+                isEntityCullingLoaded = FabricLoader.getInstance().isModLoaded("entityculling");
+            }
+
+            public static void enforceCompatibilityRules() {
+                checkCompatibility();
+                if (isSodiumLoaded) {
+                    cullBlockEntities = false; 
+                }
+                if (isEntityCullingLoaded) {
+                    cullEntities = false; 
+                }
+            }
+
+            public static String getAutoDetectProfile() {
+                int cores = Runtime.getRuntime().availableProcessors();
+                long maxMemory = Runtime.getRuntime().maxMemory() / 1024 / 1024;
+                boolean isPojav = System.getProperty("java.vendor", "").contains("Pojav") || 
+                                  System.getProperty("java.vm.name", "").contains("Pojav") || 
+                                  new File("/sdcard").exists();
+
+                if (isPojav || maxMemory < 2500) {
+                    return "Potato";
+                } else if (cores <= 6 || maxMemory < 4000) {
+                    return "Low-End";
+                } else {
+                    return "Mid-End";
+                }
+            }
+
+            private static void applyProfileDefaults(String profile) {
+                activeProfile = profile;
+                if (profile.equals("Potato")) {
+                    cullEntities = true; cullBlockEntities = true; limitParticles = true; limitItems = true;
+                    cullArmorStands = true; dynamicDistances = true; memoryOptimization = true;
+                    disableFog = true; disableClouds = true; disableWeather = true; optimizeBeacon = true;
+                } else if (profile.equals("Low-End")) {
+                    cullEntities = true; cullBlockEntities = true; limitParticles = true; limitItems = true;
+                    cullArmorStands = true; dynamicDistances = true; memoryOptimization = true;
+                    disableFog = true; disableClouds = true; disableWeather = false; optimizeBeacon = true;
+                } else if (profile.equals("Mid-End")) {
+                    cullEntities = true; cullBlockEntities = false; limitParticles = false; limitItems = true;
+                    cullArmorStands = false; dynamicDistances = false; memoryOptimization = true;
+                    disableFog = false; disableClouds = false; disableWeather = false; optimizeBeacon = false;
+                }
+            }
+
+            public static void applyProfile(String profile) {
+                applyProfileDefaults(profile);
+                enforceCompatibilityRules();
+                save();
+            }
+
+            private static class ConfigHolder {
+                boolean cullEntities = ModConfig.cullEntities;
+                boolean cullBlockEntities = ModConfig.cullBlockEntities;
+                boolean limitParticles = ModConfig.limitParticles;
+                boolean limitItems = ModConfig.limitItems;
+                boolean cullArmorStands = ModConfig.cullArmorStands;
+                boolean dynamicDistances = ModConfig.dynamicDistances;
+                boolean memoryOptimization = ModConfig.memoryOptimization;
+                boolean disableFog = ModConfig.disableFog;
+                boolean disableClouds = ModConfig.disableClouds;
+                boolean disableWeather = ModConfig.disableWeather;
+                boolean optimizeBeacon = ModConfig.optimizeBeacon;
+                boolean showFpsHud = ModConfig.showFpsHud;
+                String activeProfile = ModConfig.activeProfile;
+            }
+        }
+        EOF
+
+        # === MIXINS ===
+        cat << 'EOF' > src/main/java/com/fpsboost/mixin/ParticleManagerMixin.java
+        package com.fpsboost.mixin;
+
+        import net.minecraft.client.particle.Particle;
+        import net.minecraft.client.particle.ParticleManager;
+        import org.spongepowered.asm.mixin.Mixin;
+        import org.spongepowered.asm.mixin.injection.At;
+        import org.spongepowered.asm.mixin.injection.Inject;
+        import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
+        import com.fpsboost.config.ModConfig;
+
+        @Mixin(ParticleManager.class)
+        public class ParticleManagerMixin {
+            private int counter = 0;
+            @Inject(method = "addParticle(Lnet/minecraft/client/particle/Particle;)V", at = @At("HEAD"), cancellable = true)
+            private void onAddParticle(Particle particle, CallbackInfo ci) {
+                if (ModConfig.limitParticles) {
+                    counter++;
+                    if (counter % 4 != 0) { 
+                        ci.cancel();
+                    }
+                }
+            }
+        }
+        EOF
+
+        cat << 'EOF' > src/main/java/com/fpsboost/mixin/BlockEntityRenderMixin.java
+        package com.fpsboost.mixin;
+
+        import net.minecraft.block.entity.BlockEntity;
+        import net.minecraft.block.entity.BeaconBlockEntity;
+        import net.minecraft.client.MinecraftClient;
+        import net.minecraft.client.render.block.entity.BlockEntityRenderDispatcher;
+        import net.minecraft.client.render.VertexConsumerProvider;
+        import net.minecraft.client.util.math.MatrixStack;
+        import org.spongepowered.asm.mixin.Mixin;
+        import org.spongepowered.asm.mixin.injection.At;
+        import org.spongepowered.asm.mixin.injection.Inject;
+        import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
+        import com.fpsboost.config.ModConfig;
+
+        @Mixin(BlockEntityRenderDispatcher.class)
+        public class BlockEntityRenderMixin {
+            @Inject(method = "render", at = @At("HEAD"), cancellable = true)
+            private <E extends BlockEntity> void onRenderBlockEntity(E blockEntity, float tickDelta, MatrixStack matrices, VertexConsumerProvider vertexConsumers, CallbackInfo ci) {
+                if (ModConfig.cullBlockEntities) {
+                    MinecraftClient client = MinecraftClient.getInstance();
+                    if (client != null && client.player != null && blockEntity.getPos() != null) {
+                        double dist = client.player.getPos().squaredDistanceTo(blockEntity.getPos().getX(), blockEntity.getPos().getY(), blockEntity.getPos().getZ());
+                        
+                        if (blockEntity instanceof BeaconBlockEntity && ModConfig.optimizeBeacon) {
+                            if (dist > 576.0) { 
+                                ci.cancel();
+                                return;
+                            }
+                        }
+                        // افزایش مسافت رندر تایل‌ها برای رفع باگ Popping زشت چست‌ها و شالکرها
+                        if (dist > 2304.0) { 
+                            ci.cancel();
+                        }
+                    }
+                }
+            }
+        }
+        EOF
+
+        cat << 'EOF' > src/main/java/com/fpsboost/mixin/EntityRenderMixin.java
+        package com.fpsboost.mixin;
+
+        import net.minecraft.client.render.entity.EntityRenderDispatcher;
+        import net.minecraft.client.MinecraftClient;
+        import net.minecraft.client.util.math.MatrixStack;
+        import net.minecraft.client.render.VertexConsumerProvider;
+        import net.minecraft.entity.Entity;
+        import net.minecraft.entity.ItemEntity;
+        import net.minecraft.entity.decoration.ArmorStandEntity;
+        import net.minecraft.entity.player.PlayerEntity;
+        import org.spongepowered.asm.mixin.Mixin;
+        import org.spongepowered.asm.mixin.injection.At;
+        import org.spongepowered.asm.mixin.injection.Inject;
+        import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
+        import com.fpsboost.config.ModConfig;
+
+        @Mixin(EntityRenderDispatcher.class)
+        public class EntityRenderMixin {
+            @Inject(method = "render", at = @At("HEAD"), cancellable = true)
+            private <E extends Entity> void onRenderEntity(E entity, double x, double y, double z, float yaw, float tickDelta, MatrixStack matrices, VertexConsumerProvider vertexConsumers, int light, CallbackInfo ci) {
+                if (entity instanceof PlayerEntity) {
+                    return; 
+                }
+                
+                // استثنا کردن باس‌ها و ماب‌های بزرگ چثه از محاسبات کالینگ جهت رفع غیب شدن ناگهانی اژدها و ویدر
+                if (!entity.isNonBoss() || entity.getType().getDimensions().width > 1.5f || entity.getType().getDimensions().height > 2.5f) {
+                    return;
+                }
+
+                MinecraftClient client = MinecraftClient.getInstance();
+                if (client != null && client.player != null) {
+                    double dist = client.player.squaredDistanceTo(entity);
+
+                    if (!client.isInSingleplayer()) {
+                        if (dist > 3600.0) { 
+                            ci.cancel();
+                        }
+                        return;
+                    }
+
+                    if (entity instanceof ItemEntity && ModConfig.limitItems) {
+                        if (dist > 144.0) { 
+                            ci.cancel();
+                            return;
+                        }
+                    }
+                    if (entity instanceof ArmorStandEntity && ModConfig.cullArmorStands) {
+                        if (dist > 256.0) { 
+                            ci.cancel();
+                            return;
+                        }
+                    }
+                    if (ModConfig.cullEntities) {
+                        if (dist > 1600.0) { 
+                            ci.cancel();
+                        }
+                    }
+                }
+            }
+        }
+        EOF
+
+        cat << 'EOF' > src/main/java/com/fpsboost/mixin/HudMixin.java
+        package com.fpsboost.mixin;
+
+        import net.minecraft.client.MinecraftClient;
+        import net.minecraft.client.gui.DrawContext;
+        import net.minecraft.client.gui.hud.InGameHud;
+        import net.minecraft.client.render.RenderTickCounter;
+        import com.fpsboost.config.ModConfig;
+        import com.fpsboost.ui.FastOptimizeEngine;
+        import org.spongepowered.asm.mixin.Mixin;
+        import org.spongepowered.asm.mixin.injection.At;
+        import org.spongepowered.asm.mixin.injection.Inject;
+        import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
+
+        @Mixin(InGameHud.class)
+        public class HudMixin {
+            private int frameTicks = 0;
+            private int ramTickCounter = 0;
+            private static String cachedRamText = "0MB / 0MB";
+
+            @Inject(method = "render", at = @At("TAIL"))
+            private void onRenderFpsCounter(DrawContext context, RenderTickCounter tickCounter, CallbackInfo ci) {
+                MinecraftClient client = MinecraftClient.getInstance();
+                if (client != null && !client.options.hudHidden && client.world != null && ModConfig.showFpsHud) {
+                    frameTicks++;
+                    if (frameTicks >= 150) { 
+                        frameTicks = 0;
+                        FastOptimizeEngine.runBackgroundCacheClear();
+                    }
+
+                    ramTickCounter++;
+                    if (ramTickCounter >= 60 || cachedRamText.equals("0MB / 0MB")) {
+                        ramTickCounter = 0;
+                        long totalMem = Runtime.getRuntime().totalMemory();
+                        long freeMem = Runtime.getRuntime().freeMemory();
+                        long usedMem = (totalMem - freeMem) / 1024 / 1024;
+                        long allocatedMem = totalMem / 1024 / 1024;
+                        cachedRamText = usedMem + "MB / " + allocatedMem + "MB";
+                    }
+
+                    String infoText = "§b⚡ FPS: §f" + client.getCurrentFps() + " §7| §aRAM: §f" + cachedRamText + " (" + ModConfig.activeProfile + ")";
+                    context.drawText(client.textRenderer, infoText, 8, 8, 0xFFFFFF, true);
+
+                    if (FastOptimizeEngine.showNotification) {
+                        context.drawText(client.textRenderer, "§e[⚡] Optimization Engine Refreshed Securely!", 8, 20, 0xFFFF55, true);
+                    }
+                }
+            }
+        }
+        EOF
+
+        cat << 'EOF' > src/main/java/com/fpsboost/mixin/VideoOptionsMixin.java
+        package com.fpsboost.mixin;
+
+        import net.minecraft.client.MinecraftClient;
+        import net.minecraft.client.gui.screen.option.VideoOptionsScreen;
+        import net.minecraft.client.gui.screen.Screen;
+        import net.minecraft.client.gui.widget.ButtonWidget;
+        import net.minecraft.text.Text;
+        import com.fpsboost.ui.FPSBoostMenuScreen;
+        import org.spongepowered.asm.mixin.Mixin;
+        import org.spongepowered.asm.mixin.injection.At;
+        import org.spongepowered.asm.mixin.injection.Inject;
+        import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
+
+        @Mixin(VideoOptionsScreen.class)
+        public class VideoOptionsMixin {
+            @Inject(method = "init", at = @At("TAIL"))
+            private void onInit(CallbackInfo ci) {
+                Screen screen = (Screen) (Object) this;
+                screen.addDrawableChild(ButtonWidget.builder(Text.literal("§d★ FPS Boost Pro Menu ★"), button -> {
+                    MinecraftClient.getInstance().setScreen(new FPSBoostMenuScreen(screen));
+                }).dimensions(screen.width / 2 - 100, 6, 200, 20).build());
+            }
+        }
+        EOF
+
+        cat << 'EOF' > src/main/java/com/fpsboost/mixin/MultiplayerScreenMixin.java
+        package com.fpsboost.mixin;
+
+        import net.minecraft.client.MinecraftClient;
+        import net.minecraft.client.gui.screen.multiplayer.MultiplayerScreen;
+        import net.minecraft.client.gui.screen.Screen;
+        import net.minecraft.client.gui.widget.ButtonWidget;
+        import net.minecraft.text.Text;
+        import com.fpsboost.ui.FPSBoostMenuScreen;
+        import org.spongepowered.asm.mixin.Mixin;
+        import org.spongepowered.asm.mixin.injection.At;
+        import org.spongepowered.asm.mixin.injection.Inject;
+        import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
+
+        @Mixin(MultiplayerScreen.class)
+        public class MultiplayerScreenMixin {
+            @Inject(method = "init", at = @At("TAIL"))
+            private void onInit(CallbackInfo ci) {
+                Screen screen = (Screen) (Object) this;
+                screen.addDrawableChild(ButtonWidget.builder(Text.literal("§dFPS Boost Pro"), button -> {
+                    MinecraftClient.getInstance().setScreen(new FPSBoostMenuScreen(screen));
+                }).dimensions(5, 5, 95, 20).build());
+            }
+        }
+        EOF
+
+        cat << 'EOF' > src/main/java/com/fpsboost/mixin/FogRenderMixin.java
+        package com.fpsboost.mixin;
+
+        import net.minecraft.client.render.BackgroundRenderer;
+        import net.minecraft.client.render.Camera;
+        import com.fpsboost.config.ModConfig;
+        import org.spongepowered.asm.mixin.Mixin;
+        import org.spongepowered.asm.mixin.injection.At;
+        import org.spongepowered.asm.mixin.injection.Inject;
+        import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
+
+        @Mixin(BackgroundRenderer.class)
+        public class FogRenderMixin {
+            @Inject(method = "applyFog", at = @At("HEAD"), cancellable = true)
+            private static void onApplyFog(Camera camera, BackgroundRenderer.FogType fogType, float viewDistance, boolean thickFog, float tickDelta, CallbackInfo ci) {
+                if (ModConfig.disableFog) {
+                    ci.cancel();
+                }
+            }
+        }
+        EOF
+
+        # === WORLD RENDERER MIXIN (FIXED SIGNATURE & REMOVED RENDERSKY DAMAGE) ===
+        cat << 'EOF' > src/main/java/com/fpsboost/mixin/WorldRendererMixin.java
+        package com.fpsboost.mixin;
+
+        import net.minecraft.client.render.WorldRenderer;
+        import net.minecraft.client.util.math.MatrixStack;
+        import org.joml.Matrix4f;
+        import org.spongepowered.asm.mixin.Mixin;
+        import org.spongepowered.asm.mixin.injection.At;
+        import org.spongepowered.asm.mixin.injection.Inject;
+        import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
+        import com.fpsboost.config.ModConfig;
+
+        @Mixin(WorldRenderer.class)
+        public class WorldRendererMixin {
+            // تصحیح امضای متد با ۲ عدد ماتریکس 4f طبق مپینگ یارن 1.21.1 برای جلوگیری از کرش بیلد
+            @Inject(method = "renderClouds", at = @At("HEAD"), cancellable = true)
+            private void onRenderClouds(MatrixStack matrices, Matrix4f modelMatrix, Matrix4f projectionMatrix, float tickDelta, double cameraX, double cameraY, double cameraZ, CallbackInfo ci) {
+                if (ModConfig.disableClouds) {
+                    ci.cancel();
+                }
+            }
+
+            @Inject(method = "renderWeather", at = @At("HEAD"), cancellable = true)
+            private void onRenderWeather(net.minecraft.client.render.LightmapTextureManager manager, float tickDelta, double cameraX, double cameraY, double cameraZ, CallbackInfo ci) {
+                if (ModConfig.disableWeather) {
+                    ci.cancel();
+                }
+            }
+        }
+        EOF
+
+        # === ENGINE (STUTTER CONTROL & RECOOLDOWN TWEAKS) ===
+        cat << 'EOF' > src/main/java/com/fpsboost/ui/FastOptimizeEngine.java
+        package com.fpsboost.ui;
+
+        import net.minecraft.client.MinecraftClient;
+        import com.fpsboost.config.ModConfig;
+
+        public class FastOptimizeEngine {
+            public static boolean showNotification = false;
+            private static int distanceCooldown = 0;
+
+            public static void executeOneClickOptimize() {
+                MinecraftClient client = MinecraftClient.getInstance();
+                if (client == null || client.options == null) return;
+
+                try {
+                    client.options.getViewDistance().setValue(2);
+                    client.options.getSimulationDistance().setValue(4);
+                    // فراخوانی امن و تکی بدون قرارگیری داخل لوپ‌های مخرب چانک ریلودر پوژاو
+                    client.options.write();
+                    ModConfig.save();
+                    
+                    showNotification = true;
+                    
+                    Thread daemonNotificationThread = new Thread(() -> {
+                        try { Thread.sleep(3500); } catch(Exception e){}
+                        showNotification = false;
+                    });
+                    daemonNotificationThread.setDaemon(true);
+                    daemonNotificationThread.start();
+
+                } catch (Exception e) {}
+            }
+
+            public static void runBackgroundCacheClear() {
+                MinecraftClient client = MinecraftClient.getInstance();
+                if (client == null) return;
+
+                if (ModConfig.memoryOptimization) {
+                    if (client.worldRenderer != null && ModConfig.dynamicDistances) {
+                        distanceCooldown++;
+                        // بالا بردن کول‌داون بررسی ری‌بیلد چانک‌ها به ۱۵ فرکانس جهت حذف استاتر و مایکرو‌لگ شدید روی موبایل
+                        if (distanceCooldown >= 15) { 
+                            distanceCooldown = 0;
+                            int currentFps = client.getCurrentFps();
+                            int currentDist = client.options.getViewDistance().getValue();
+                            
+                            if (currentFps < 22 && currentDist > 2) {
+                                client.options.getViewDistance().setValue(currentDist - 1);
+                            } else if (currentFps > 58 && currentDist < 6) {
+                                client.options.getViewDistance().setValue(currentDist + 1);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        EOF
+
+        # === SCREEN UI ===
+        cat << 'EOF' > src/main/java/com/fpsboost/ui/FPSBoostMenuScreen.java
+        package com.fpsboost.ui;
+
+        import net.minecraft.client.gui.screen.Screen;
+        import net.minecraft.client.gui.widget.ButtonWidget;
+        import net.minecraft.text.Text;
+        import com.fpsboost.config.ModConfig;
+
+        public class FPSBoostMenuScreen extends Screen {
+            private final Screen parent;
+
+            public FPSBoostMenuScreen(Screen parent) {
+                super(Text.literal("FPS Boost Pro Main Dashboard"));
+                this.parent = parent;
+            }
+
+            @Override
+            protected void init() {
+                int startY = this.height / 2 - 45;
+
+                this.addDrawableChild(ButtonWidget.builder(Text.literal("§e⚡ ONE CLICK INSTANT OPTIMIZE"), button -> {
+                    FastOptimizeEngine.executeOneClickOptimize();
+                    this.client.setScreen(this.parent);
+                }).dimensions(this.width / 2 - 110, startY, 220, 20).build());
+
+                this.addDrawableChild(ButtonWidget.builder(Text.literal("§b⚙ Core Tweaks Optimization"), button -> {
+                    this.client.setScreen(new AddonSettingsScreen(this));
+                }).dimensions(this.width / 2 - 110, startY + 24, 220, 20).build());
+
+                this.addDrawableChild(ButtonWidget.builder(Text.literal("§a📊 Hardware Device Profiles"), button -> {
+                    this.client.setScreen(new ProfileScreen(this));
+                }).dimensions(this.width / 2 - 110, startY + 48, 220, 20).build());
+
+                this.addDrawableChild(ButtonWidget.builder(Text.literal("Save & Exit"), button -> {
+                    ModConfig.save();
+                    this.client.setScreen(this.parent);
+                }).dimensions(this.width / 2 - 60, startY + 78, 120, 20).build());
+            }
+
+            @Override
+            public void render(net.minecraft.client.gui.DrawContext context, int mouseX, int mouseY, float delta) {
+                this.renderBackground(context, mouseX, mouseY, delta);
+                context.drawCenteredTextWithShadow(this.textRenderer, "§dFPS Boost Pro Engine v3.0 (Independent)", this.width / 2, 15, 0xFFFFFF);
+                context.drawCenteredTextWithShadow(this.textRenderer, "§7Designed for Performance Optimization on PojavLauncher", this.width / 2, 28, 0xAAAAAA);
+                
+                // نمایش وضعیت سازگاری مادهای مکمل گرافیکی مثل سدیم و انتیتی کالینگ در داشبورد اصلی منو
+                String sodiumStatus = ModConfig.isSodiumLoaded ? "§aSodium Checked" : "§eSodium Not Loaded";
+                String entityCullingStatus = ModConfig.isEntityCullingLoaded ? "§aEntityCulling Active" : "§7EntityCulling Inactive";
+                context.drawCenteredTextWithShadow(this.textRenderer, sodiumStatus + " §7| " + entityCullingStatus, this.width / 2, this.height - 22, 0xAAAAAA);
+                super.render(context, mouseX, mouseY, delta);
+            }
+        }
+        EOF
+
+        cat << 'EOF' > src/main/java/com/fpsboost/ui/ProfileScreen.java
+        package com.fpsboost.ui;
+
+        import net.minecraft.client.gui.screen.Screen;
+        import net.minecraft.client.gui.widget.ButtonWidget;
+        import net.minecraft.text.Text;
+        import com.fpsboost.config.ModConfig;
+
+        public class ProfileScreen extends Screen {
+            private final Screen parent;
+
+            public ProfileScreen(Screen parent) {
+                super(Text.literal("Device Performance Profile Selection"));
+                this.parent = parent;
+            }
+
+            @Override
+            protected void init() {
+                int btnWidth = 200;
+                int startY = this.height / 2 - 50;
+
+                this.addDrawableChild(ButtonWidget.builder(Text.literal("§c🥔 Potato Profile"), button -> {
+                    ModConfig.applyProfile("Potato");
+                }).dimensions(this.width / 2 - 100, startY, btnWidth, 20).build());
+
+                this.addDrawableChild(ButtonWidget.builder(Text.literal("§e📉 Low-End Profile"), button -> {
+                    ModConfig.applyProfile("Low-End");
+                }).dimensions(this.width / 2 - 100, startY + 24, btnWidth, 20).build());
+
+                this.addDrawableChild(ButtonWidget.builder(Text.literal("§a📊 Mid-End Profile"), button -> {
+                    ModConfig.applyProfile("Mid-End");
+                }).dimensions(this.width / 2 - 100, startY + 48, btnWidth, 20).build());
+
+                this.addDrawableChild(ButtonWidget.builder(Text.literal("§b🔍 Auto Detect Hardware"), button -> {
+                    String detected = ModConfig.getAutoDetectProfile();
+                    ModConfig.applyProfile(detected);
+                }).dimensions(this.width / 2 - 100, startY + 72, btnWidth, 20).build());
+
+                this.addDrawableChild(ButtonWidget.builder(Text.literal("Back"), button -> {
+                    this.client.setScreen(this.parent);
+                }).dimensions(this.width / 2 - 50, startY + 102, 100, 20).build());
+            }
+
+            @Override
+            public void render(net.minecraft.client.gui.DrawContext context, int mouseX, int mouseY, float delta) {
+                this.renderBackground(context, mouseX, mouseY, delta);
+                context.drawCenteredTextWithShadow(this.textRenderer, "§aHardware Optimization Profiles", this.width / 2, 20, 0xFFFFFF);
+                context.drawCenteredTextWithShadow(this.textRenderer, "§7Current Profile Active: §f" + ModConfig.activeProfile, this.width / 2, this.height / 2 + 38, 0x99FF99);
+                super.render(context, mouseX, mouseY, delta);
+            }
+        }
+        EOF
+
+        cat << 'EOF' > src/main/java/com/fpsboost/ui/AddonSettingsScreen.java
+        package com.fpsboost.ui;
+
+        import net.minecraft.client.gui.screen.Screen;
+        import net.minecraft.client.gui.widget.ButtonWidget;
+        import net.minecraft.text.Text;
+        import com.fpsboost.config.ModConfig;
+
+        public class AddonSettingsScreen extends Screen {
+            private final Screen parent;
+
+            public AddonSettingsScreen(Screen parent) {
+                super(Text.literal("Independent Optimization Controls"));
+                this.parent = parent;
+            }
+
+            @Override
+            protected void init() {
+                int btnWidth = 160;
+                int startX = this.width / 2 - 165;
+                int startY = this.height / 2 - 70;
+
+                this.addDrawableChild(ButtonWidget.builder(Text.literal("Safe Culling: " + (ModConfig.cullEntities ? "§aON" : "§cOFF")), button -> {
+                    ModConfig.cullEntities = !ModConfig.cullEntities; ModConfig.save();
+                    this.client.setScreen(new AddonSettingsScreen(this.parent));
+                }).dimensions(startX, startY, btnWidth, 20).build());
+
+                this.addDrawableChild(ButtonWidget.builder(Text.literal("Block Culling: " + (ModConfig.cullBlockEntities ? "§aON" : "§cOFF")), button -> {
+                    ModConfig.cullBlockEntities = !ModConfig.cullBlockEntities; ModConfig.save();
+                    this.client.setScreen(new AddonSettingsScreen(this.parent));
+                }).dimensions(startX + 170, startY, btnWidth, 20).build());
+
+                this.addDrawableChild(ButtonWidget.builder(Text.literal("Limit Particles: " + (ModConfig.limitParticles ? "§aON" : "§cOFF")), button -> {
+                    ModConfig.limitParticles = !ModConfig.limitParticles; ModConfig.save();
+                    this.client.setScreen(new AddonSettingsScreen(this.parent));
+                }).dimensions(startX, startY + 24, btnWidth, 20).build());
+
+                this.addDrawableChild(ButtonWidget.builder(Text.literal("Ground Item Limit: " + (ModConfig.limitItems ? "§aON" : "§cOFF")), button -> {
+                    ModConfig.limitItems = !ModConfig.limitItems; ModConfig.save();
+                    this.client.setScreen(new AddonSettingsScreen(this.parent));
+                }).dimensions(startX + 170, startY + 24, btnWidth, 20).build());
+
+                this.addDrawableChild(ButtonWidget.builder(Text.literal("Armor Stand Cull: " + (ModConfig.cullArmorStands ? "§aON" : "§cOFF")), button -> {
+                    ModConfig.cullArmorStands = !ModConfig.cullArmorStands; ModConfig.save();
+                    this.client.setScreen(new AddonSettingsScreen(this.parent));
+                }).dimensions(startX, startY + 48, btnWidth, 20).build());
+
+                this.addDrawableChild(ButtonWidget.builder(Text.literal("Dynamic Distance: " + (ModConfig.dynamicDistances ? "§aON" : "§cOFF")), button -> {
+                    ModConfig.dynamicDistances = !ModConfig.dynamicDistances; ModConfig.save();
+                    this.client.setScreen(new AddonSettingsScreen(this.parent));
+                }).dimensions(startX + 170, startY + 48, btnWidth, 20).build());
+
+                this.addDrawableChild(ButtonWidget.builder(Text.literal("Disable Fog Render: " + (ModConfig.disableFog ? "§aON" : "§cOFF")), button -> {
+                    ModConfig.disableFog = !ModConfig.disableFog; ModConfig.save();
+                    this.client.setScreen(new AddonSettingsScreen(this.parent));
+                }).dimensions(startX, startY + 72, btnWidth, 20).build());
+
+                this.addDrawableChild(ButtonWidget.builder(Text.literal("Dynamic RAM Clear: " + (ModConfig.memoryOptimization ? "§aON" : "§cOFF")), button -> {
+                    ModConfig.memoryOptimization = !ModConfig.memoryOptimization; ModConfig.save();
+                    this.client.setScreen(new AddonSettingsScreen(this.parent));
+                }).dimensions(startX + 170, startY + 72, btnWidth, 20).build());
+
+                // دکمه Sky Optimization و الگوهای اضافی فلوید کلا حذف و گریدبندی با المان‌های زیر بازسازی شد
+                this.addDrawableChild(ButtonWidget.builder(Text.literal("Beacon Beam Cull: " + (ModConfig.optimizeBeacon ? "§aON" : "§cOFF")), button -> {
+                    ModConfig.optimizeBeacon = !ModConfig.optimizeBeacon; ModConfig.save();
+                    this.client.setScreen(new AddonSettingsScreen(this.parent));
+                }).dimensions(startX, startY + 96, btnWidth, 20).build());
+
+                this.addDrawableChild(ButtonWidget.builder(Text.literal("Show FPS HUD: " + (ModConfig.showFpsHud ? "§aON" : "§cOFF")), button -> {
+                    ModConfig.showFpsHud = !ModConfig.showFpsHud; ModConfig.save();
+                    this.client.setScreen(new AddonSettingsScreen(this.parent));
+                }).dimensions(startX + 170, startY + 96, btnWidth, 20).build());
+
+                this.addDrawableChild(ButtonWidget.builder(Text.literal("Save Settings"), button -> {
+                    ModConfig.save();
+                    this.client.setScreen(this.parent);
+                }).dimensions(this.width / 2 - 50, startY + 130, 100, 20).build());
+            }
+
+            @Override
+            public void render(net.minecraft.client.gui.DrawContext context, int mouseX, int mouseY, float delta) {
+                this.renderBackground(context, mouseX, mouseY, delta);
+                context.drawCenteredTextWithShadow(this.textRenderer, "§bCore Independent Optimization Controls", this.width / 2, 12, 0xFFFFFF);
+                super.render(context, mouseX, mouseY, delta);
+            }
+        }
+        EOF
+        echo "=== تمامی فایل‌های آپگرید نهایی کلاینت تزریق شدند ==="
+
+    - name: Build Mod with Gradle Wrapper
+      run: ./gradlew build
+
+    - name: Upload Mod Jar Artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: FPS-Boost-Mod-Extreme-Java21-1.21.1
+        path: build/libs/*.jar
