@@ -116,9 +116,9 @@ jobs:
         }
         EOF
 
-        printf '\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01\x00\x00\x00\x01\x08\x06\x00\x00\x00\x1f\x15\xc4\x89\x00\x00\x00\rIDATx\x9cc`\x00\x01\x00\x00\x05\x00\x01\r\n-\xb4\x00\x00\x00\x00IEND\xaeB`\x82' > src/main/resources/icon.png
+        printf '\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\{1}\x00\x00\x00\{1}\x08\x06\x00\x00\x00\x1f\x15\xc4\x89\x00\x00\x00\rIDATx\x9cc`\x00\x01\x00\x00\x05\x00\x01\r\n-\xb4\x00\x00\x00\x00IEND\xaeB`\x82' > src/main/resources/icon.png
 
-        # میکسین‌های اصلی و کاملاً امن (اضافه شدن ScreenAccessor)
+        # میکسین‌های اصلی و کاملاً امن (شامل ScreenAccessor)
         cat << 'EOF' > src/main/resources/fpsboost.mixins.json
         {
           "required": true,
@@ -171,7 +171,7 @@ jobs:
         }
         EOF
 
-        # === CONFIG SYSTEM (REFACTORED FOR COMPATIBILITY & NO OVERRIDES) ===
+        # === CONFIG SYSTEM ===
         cat << 'EOF' > src/main/java/com/fpsboost/config/ModConfig.java
         package com.fpsboost.config;
 
@@ -386,7 +386,6 @@ jobs:
         }
         EOF
 
-        # فیکس خطای وجود نداشتن isNonBoss و فیکس متدهای جایگزین فیلدهای خصوصی width و height
         cat << 'EOF' > src/main/java/com/fpsboost/mixin/EntityRenderMixin.java
         package com.fpsboost.mixin;
 
@@ -500,7 +499,7 @@ jobs:
         }
         EOF
 
-        # فیکس خطای دسترسی protected متد addDrawableChild با استفاده از ScreenAccessor
+        # فیکس با فیلتر دقیق دیسکریپتور init()V برای حذف کامل وارنینگ بیلد
         cat << 'EOF' > src/main/java/com/fpsboost/mixin/VideoOptionsMixin.java
         package com.fpsboost.mixin;
 
@@ -518,7 +517,7 @@ jobs:
 
         @Mixin(VideoOptionsScreen.class)
         public class VideoOptionsMixin {
-            @Inject(method = "init", at = @At("TAIL"))
+            @Inject(method = "init()V", at = @At("TAIL"))
             private void onInit(CallbackInfo ci) {
                 Screen screen = (Screen) (Object) this;
                 ((ScreenAccessor) screen).invokeAddDrawableChild(ButtonWidget.builder(Text.literal("§d★ FPS Boost Pro Menu ★"), button -> {
@@ -528,7 +527,7 @@ jobs:
         }
         EOF
 
-        # فیکس خطای دسترسی protected متد addDrawableChild با استفاده از ScreenAccessor
+        # فیکس با فیلتر دقیق دیسکریپتور init()V برای حذف کامل وارنینگ بیلد
         cat << 'EOF' > src/main/java/com/fpsboost/mixin/MultiplayerScreenMixin.java
         package com.fpsboost.mixin;
 
@@ -546,7 +545,7 @@ jobs:
 
         @Mixin(MultiplayerScreen.class)
         public class MultiplayerScreenMixin {
-            @Inject(method = "init", at = @At("TAIL"))
+            @Inject(method = "init()V", at = @At("TAIL"))
             private void onInit(CallbackInfo ci) {
                 Screen screen = (Screen) (Object) this;
                 ((ScreenAccessor) screen).invokeAddDrawableChild(ButtonWidget.builder(Text.literal("§dFPS Boost Pro"), button -> {
